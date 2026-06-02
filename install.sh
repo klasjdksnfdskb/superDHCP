@@ -69,7 +69,7 @@ install_system_deps() {
     $PKG_MGR install -y \
         python3 python3-devel python3-pip \
         postgresql postgresql-server postgresql-devel \
-        redis nginx \
+        redis nginx rsync \
         gcc gcc-c++ make \
         libffi-devel openssl-devel bzip2-devel \
         &>/dev/null && log_info "System packages installed." || {
