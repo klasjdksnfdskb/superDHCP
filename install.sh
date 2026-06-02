@@ -99,7 +99,8 @@ setup_dirs() {
     rsync -a --delete "$PROJECT_DIR/backend/" "$APP_DIR/backend/"
 
     chown -R "$APP_USER:$APP_USER" "$APP_DIR" "$DATA_DIR" "$CONFIG_DIR" "$LOG_DIR"
-    chmod 750 "$APP_DIR" "$CONFIG_DIR"
+    chmod 755 "$APP_DIR"       # nginx needs +x to traverse
+    chmod 750 "$CONFIG_DIR"    # keep config restricted
     chmod 770 "$DATA_DIR" "$LOG_DIR"
 }
 
@@ -283,6 +284,13 @@ configure_selinux() {
             restorecon -Rv "$APP_DIR/frontend/" 2>/dev/null || true
             log_info "SELinux context applied to $APP_DIR/frontend/."
         fi
+
+        # CRITICAL: parent directory needs httpd_sys_content_t too,
+        # otherwise nginx cannot traverse to frontend/
+        semanage fcontext -a -t httpd_sys_content_t "$APP_DIR(/.*)?" 2>/dev/null || \
+            chcon -t httpd_sys_content_t "$APP_DIR/" 2>/dev/null || true
+        restorecon -Rv "$APP_DIR/" 2>/dev/null || true
+        log_info "SELinux context applied to $APP_DIR/ (parent traversal)."
 
         # Also allow nginx to read backend if needed
         if [ -d "$APP_DIR/backend" ]; then
