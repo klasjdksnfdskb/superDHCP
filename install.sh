@@ -93,12 +93,8 @@ setup_dirs() {
 
     mkdir -p "$APP_DIR" "$DATA_DIR" "$CONFIG_DIR" "$LOG_DIR"
 
-    # Copy application files
+    # Copy backend application files (frontend is handled by setup_frontend)
     rsync -a --delete "$PROJECT_DIR/backend/" "$APP_DIR/backend/"
-    rsync -a "$PROJECT_DIR/frontend/dist/" "$APP_DIR/frontend/" 2>/dev/null || {
-        log_warn "No pre-built frontend dist/. Run 'npm run build' offline first."
-        mkdir -p "$APP_DIR/frontend"
-    }
 
     chown -R "$APP_USER:$APP_USER" "$APP_DIR" "$DATA_DIR" "$CONFIG_DIR" "$LOG_DIR"
     chmod 750 "$APP_DIR" "$CONFIG_DIR"
@@ -132,10 +128,11 @@ setup_python_venv() {
 setup_frontend() {
     log_info "Setting up frontend..."
 
+    mkdir -p "$APP_DIR/frontend"
+
     # If pre-built dist exists, use it directly
     if [ -d "$PROJECT_DIR/frontend/dist" ] && [ -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
         log_info "Using pre-built frontend from frontend/dist/"
-        mkdir -p "$APP_DIR/frontend"
         rsync -a --delete "$PROJECT_DIR/frontend/dist/" "$APP_DIR/frontend/"
         return 0
     fi
@@ -144,14 +141,71 @@ setup_frontend() {
     if [ -f "$PROJECT_DIR/frontend/setup.sh" ]; then
         log_info "Running frontend offline setup..."
         cd "$PROJECT_DIR"
-        bash frontend/setup.sh
-        mkdir -p "$APP_DIR/frontend"
-        rsync -a --delete "$PROJECT_DIR/frontend/dist/" "$APP_DIR/frontend/"
+        if bash frontend/setup.sh 2>&1; then
+            if [ -d "$PROJECT_DIR/frontend/dist" ] && [ -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
+                rsync -a --delete "$PROJECT_DIR/frontend/dist/" "$APP_DIR/frontend/"
+                log_info "Frontend built and deployed successfully."
+                return 0
+            fi
+        fi
+        log_warn "Frontend build failed. Serving setup guide page instead."
     else
-        log_warn "No frontend setup available. Web UI will not be accessible."
+        log_warn "No frontend setup available. Serving setup guide page."
         log_warn "Run vendor-download.sh on an internet-connected machine first."
-        mkdir -p "$APP_DIR/frontend"
     fi
+
+    # Fallback: create a placeholder so nginx doesn't return 500
+    cat > "$APP_DIR/frontend/index.html" <<'FALLBACK_HTML'
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>superDHCP - Setup Guide</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0e17; color: #e0e6ed; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 48px; max-width: 600px; width: 90%; text-align: center; }
+h1 { font-size: 28px; margin-bottom: 8px; color: #3b82f6; }
+.badge { display: inline-block; background: #1e3a5f; color: #3b82f6; padding: 4px 16px; border-radius: 20px; font-size: 14px; margin-bottom: 24px; }
+.step { text-align: left; background: #0f172a; border-radius: 8px; padding: 16px 20px; margin: 12px 0; }
+.step .num { display: inline-block; background: #3b82f6; color: #fff; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 50%; font-size: 13px; margin-right: 10px; }
+code { background: #1e293b; padding: 2px 8px; border-radius: 4px; font-size: 13px; color: #60a5fa; }
+.api-link { margin-top: 24px; }
+.api-link a { color: #3b82f6; text-decoration: none; font-weight: 500; }
+.api-link a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>superDHCP</h1>
+  <div class="badge">v1.0.0 &middot; Carrier-Grade DHCP Server</div>
+  <p style="margin-bottom:8px; color:#9ca3af;">The Web UI frontend is not yet built.</p>
+  <p style="margin-bottom:24px; color:#9ca3af;">Follow the steps below to enable it:</p>
+
+  <div class="step">
+    <span class="num">1</span> On an <strong>internet-connected</strong> Linux machine:
+    <br><code>bash vendor-download.sh</code>
+  </div>
+  <div class="step">
+    <span class="num">2</span> Copy the project to this server:
+    <br><code>scp -r superDHCP/ root@&lt;this-server&gt;:/tmp/</code>
+  </div>
+  <div class="step">
+    <span class="num">3</span> Re-run the installer:
+    <br><code>cd /tmp/superDHCP &amp;&amp; sudo bash install.sh</code>
+  </div>
+
+  <div class="api-link">
+    <p style="color:#6b7280; font-size:14px;">Backend API is available at:</p>
+    <a href="/api/docs">/api/docs &rarr; Swagger UI</a>
+  </div>
+</div>
+</body>
+</html>
+FALLBACK_HTML
+
+    log_info "Created fallback index.html (setup guide)."
 }
 
 # ── PostgreSQL Setup ───────────────────────────────────────────────
