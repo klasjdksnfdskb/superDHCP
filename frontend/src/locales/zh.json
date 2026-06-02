@@ -152,7 +152,23 @@
     "orgTag": "关联组织架构",
     "orgTagPlaceholder": "选择组织架构标签",
     "noOrgTag": "不关联",
-    "poolInfo": "基本信息"
+    "noOrgTags": "暂未创建组织架构标签",
+    "poolInfo": "基本信息",
+    "ipv4Config": "IPv4 配置",
+    "ipv6Config": "IPv6 配置",
+    "prefixLength": "前缀长度",
+    "prefixLengthPlaceholder": "如: 64",
+    "v6Mode": "IPv6 分配模式",
+    "v6Stateful": "有状态自动配置 (Stateful)",
+    "v6Stateless": "无状态自动配置 (Stateless)",
+    "v6PD": "DHCP-PD 前缀委派",
+    "v6ModeHint": "有状态：DHCPv6完整管理；无状态：SLAAC获取地址+DHCPv6提供DNS等信息；PD：向下级路由器委派前缀",
+    "v6PDPrefix": "委派前缀",
+    "v6PDPrefixPlaceholder": "如: /56 或 /48",
+    "enableReservationV4": "启用 IPv4 预留地址",
+    "enableReservationV6": "启用 IPv6 预留地址",
+    "reservationHint": "为特定MAC绑定固定IP地址",
+    "noTagsLoaded": "组织架构标签加载失败"
   },
 
   "tags": {

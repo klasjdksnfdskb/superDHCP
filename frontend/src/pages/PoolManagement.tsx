@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { poolsAPI, tagsAPI } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import PoolGauge from '@/components/PoolGauge';
-import { Plus, Trash2, Edit2, Network, X, Globe } from 'lucide-react';
+import { Plus, Trash2, Edit2, Network, X, Globe, AlertCircle } from 'lucide-react';
 
 interface Pool {
   id: string;
@@ -40,11 +40,15 @@ interface SubnetDraft {
   ip_version: number;
   lease_time: string;
   option_data: string;
+  v6_mode: string;
+  delegation_prefix: string;
+  enable_reservation_v4: boolean;
+  enable_reservation_v6: boolean;
 }
 
 const emptySubnet = (v: number): SubnetDraft => ({
   subnet: '',
-  netmask: '',
+  netmask: v === 4 ? '24' : '64',
   gateway: '',
   dns_servers: '',
   range_start: '',
@@ -52,6 +56,10 @@ const emptySubnet = (v: number): SubnetDraft => ({
   ip_version: v,
   lease_time: '86400',
   option_data: '',
+  v6_mode: 'stateful',
+  delegation_prefix: '',
+  enable_reservation_v4: false,
+  enable_reservation_v6: false,
 });
 
 export default function PoolManagement() {
@@ -60,6 +68,8 @@ export default function PoolManagement() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [tagsError, setTagsError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Pool form state
@@ -81,12 +91,17 @@ export default function PoolManagement() {
   };
 
   const fetchTags = async () => {
+    setLoadingTags(true);
+    setTagsError(false);
     try {
       const { data } = await tagsAPI.list();
-      // API returns flat list with level
       setTags(Array.isArray(data) ? data : []);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.error('Failed to load tags:', err);
+      setTagsError(true);
+      setTags([]);
+    } finally {
+      setLoadingTags(false);
     }
   };
 
@@ -110,7 +125,7 @@ export default function PoolManagement() {
         tag_id: addTagId || undefined,
         domain_name: undefined,
         subnets: subnets
-          .filter((sn) => sn.subnet.trim() && sn.range_start.trim())
+          .filter((sn) => sn.subnet.trim())
           .map((sn) => ({
             subnet: sn.subnet.trim(),
             netmask: sn.netmask.trim(),
@@ -118,11 +133,14 @@ export default function PoolManagement() {
             dns_servers: sn.dns_servers.trim()
               ? sn.dns_servers.split(',').map((s) => s.trim())
               : undefined,
-            range_start: sn.range_start.trim(),
-            range_end: sn.range_end.trim(),
+            range_start: sn.range_start.trim() || undefined,
+            range_end: sn.range_end.trim() || undefined,
             ip_version: sn.ip_version,
             lease_time: sn.lease_time ? parseInt(sn.lease_time, 10) : undefined,
             option_data: sn.option_data.trim() ? JSON.parse(sn.option_data) : undefined,
+            v6_mode: sn.ip_version === 6 ? sn.v6_mode : undefined,
+            delegation_prefix: sn.ip_version === 6 ? sn.delegation_prefix || undefined : undefined,
+            enable_reservation: sn.ip_version === 4 ? sn.enable_reservation_v4 : sn.enable_reservation_v6,
           })),
       };
       await poolsAPI.create(payload);
@@ -149,14 +167,20 @@ export default function PoolManagement() {
     if (subnets.length <= 1) return;
     setSubnets(subnets.filter((_, idx) => idx !== i));
   };
-  const updateSubnet = (i: number, key: keyof SubnetDraft, val: string | number) => {
+  const updateSubnet = (i: number, key: keyof SubnetDraft, val: string | number | boolean) => {
     setSubnets(subnets.map((sn, idx) => idx === i ? { ...sn, [key]: val } : sn));
   };
 
-  const openAddModal = () => {
+  const openAddModal = async () => {
     resetForm();
-    fetchTags();
+    await fetchTags();
     setShowAddModal(true);
+  };
+
+  const switchIpVersion = (i: number, version: number) => {
+    setSubnets(subnets.map((sn, idx) =>
+      idx === i ? { ...emptySubnet(version), subnet: sn.subnet, netmask: sn.netmask } : sn
+    ));
   };
 
   if (loading) return <div className="empty">{t('common.loading')}</div>;
@@ -240,7 +264,7 @@ export default function PoolManagement() {
       {/* ─── Expanded Create Modal ─── */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => { setShowAddModal(false); resetForm(); }}>
-          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680, maxHeight: '85vh', overflow: 'auto' }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720, maxHeight: '85vh', overflow: 'auto' }}>
             <h2 className="modal-title">{t('pools.createPool')}</h2>
 
             {/* ═══ Section 1: Basic Info ═══ */}
@@ -263,15 +287,31 @@ export default function PoolManagement() {
 
               <div className="form-group">
                 <label className="form-label">{t('pools.orgTag')}</label>
-                <select className="input" value={addTagId} onChange={(e) => setAddTagId(e.target.value)}
-                  style={{ appearance: 'auto' }}>
-                  <option value="">{t('pools.noOrgTag')}</option>
-                  {tags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {'\u00A0\u00A0'.repeat(tag.level)}{tag.name}
-                    </option>
-                  ))}
-                </select>
+                {loadingTags ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
+                    {t('common.loading')}
+                  </div>
+                ) : tagsError ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ef4444', fontSize: 12, padding: '8px 0' }}>
+                    <AlertCircle size={14} /> {t('pools.noTagsLoaded')}
+                    <button className="btn btn-sm" style={{ marginLeft: 8, padding: '2px 8px', fontSize: 11 }}
+                      onClick={() => fetchTags()}>{t('common.retry')}</button>
+                  </div>
+                ) : (
+                  <select className="input" value={addTagId} onChange={(e) => setAddTagId(e.target.value)}
+                    style={{ appearance: 'auto' }}>
+                    <option value="">{t('pools.noOrgTag')}</option>
+                    {tags.length === 0 ? (
+                      <option value="" disabled>{t('pools.noOrgTags')}</option>
+                    ) : (
+                      tags.map((tag) => (
+                        <option key={tag.id} value={tag.id}>
+                          {'\u00A0\u00A0'.repeat(tag.level)}{tag.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                )}
               </div>
 
               <div className="form-group">
@@ -294,19 +334,19 @@ export default function PoolManagement() {
                   position: 'relative'
                 }}>
                   {/* IP version toggle */}
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
                     <div style={{ display: 'flex', gap: 0 }}>
                       <button
                         className={sn.ip_version === 4 ? 'btn btn-sm btn-primary' : 'btn btn-sm'}
-                        style={{ borderRadius: '4px 0 0 4px', padding: '4px 12px' }}
-                        onClick={() => updateSubnet(i, 'ip_version', 4)}>IPv4</button>
+                        style={{ borderRadius: '4px 0 0 4px', padding: '4px 14px' }}
+                        onClick={() => switchIpVersion(i, 4)}>IPv4</button>
                       <button
                         className={sn.ip_version === 6 ? 'btn btn-sm btn-primary' : 'btn btn-sm'}
-                        style={{ borderRadius: '0 4px 4px 0', padding: '4px 12px' }}
-                        onClick={() => updateSubnet(i, 'ip_version', 6)}>IPv6</button>
+                        style={{ borderRadius: '0 4px 4px 0', padding: '4px 14px' }}
+                        onClick={() => switchIpVersion(i, 6)}>IPv6</button>
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {t('pools.subnetConfig')} #{i + 1}
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+                      {sn.ip_version === 4 ? t('pools.ipv4Config') : t('pools.ipv6Config')} #{i + 1}
                     </span>
                     {subnets.length > 1 && (
                       <button className="btn btn-sm btn-danger" style={{ marginLeft: 'auto', padding: '2px 8px' }}
@@ -316,62 +356,194 @@ export default function PoolManagement() {
                     )}
                   </div>
 
-                  {/* Row: subnet + netmask */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.subnet')}</label>
-                      <input className="input" value={sn.subnet} placeholder={t('pools.subnetPlaceholder')}
-                        onChange={(e) => updateSubnet(i, 'subnet', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.netmask')}</label>
-                      <input className="input" value={sn.netmask} placeholder={t('pools.netmaskPlaceholder')}
-                        onChange={(e) => updateSubnet(i, 'netmask', e.target.value)} />
-                    </div>
-                  </div>
+                  {/* ── IPv4 Fields ── */}
+                  {sn.ip_version === 4 && (
+                    <>
+                      {/* Row: subnet + netmask */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.subnet')}</label>
+                          <input className="input" value={sn.subnet} placeholder={t('pools.subnetPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'subnet', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.netmask')}</label>
+                          <input className="input" value={sn.netmask} placeholder={t('pools.netmaskPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'netmask', e.target.value)} />
+                        </div>
+                      </div>
 
-                  {/* Row: gateway + DNS */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.gateway')}</label>
-                      <input className="input" value={sn.gateway} placeholder={t('pools.gatewayPlaceholder')}
-                        onChange={(e) => updateSubnet(i, 'gateway', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.dnsServers')}</label>
-                      <input className="input" value={sn.dns_servers} placeholder={t('pools.dnsPlaceholder')}
-                        onChange={(e) => updateSubnet(i, 'dns_servers', e.target.value)} />
-                    </div>
-                  </div>
+                      {/* Row: gateway + DNS */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.gateway')}</label>
+                          <input className="input" value={sn.gateway} placeholder={t('pools.gatewayPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'gateway', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.dnsServers')}</label>
+                          <input className="input" value={sn.dns_servers} placeholder={t('pools.dnsPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'dns_servers', e.target.value)} />
+                        </div>
+                      </div>
 
-                  {/* Row: range start + end */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.rangeStart')} *</label>
-                      <input className="input" value={sn.range_start} placeholder="10.0.0.2"
-                        onChange={(e) => updateSubnet(i, 'range_start', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.rangeEnd')} *</label>
-                      <input className="input" value={sn.range_end} placeholder="10.0.0.254"
-                        onChange={(e) => updateSubnet(i, 'range_end', e.target.value)} />
-                    </div>
-                  </div>
+                      {/* Row: range start + end */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.rangeStart')} *</label>
+                          <input className="input" value={sn.range_start} placeholder="10.0.0.2"
+                            onChange={(e) => updateSubnet(i, 'range_start', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.rangeEnd')} *</label>
+                          <input className="input" value={sn.range_end} placeholder="10.0.0.254"
+                            onChange={(e) => updateSubnet(i, 'range_end', e.target.value)} />
+                        </div>
+                      </div>
 
-                  {/* Row: lease time + DHCP options */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.leaseTime')}</label>
-                      <input className="input" value={sn.lease_time} placeholder={t('pools.leaseTimePlaceholder')}
-                        onChange={(e) => updateSubnet(i, 'lease_time', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">{t('pools.dhcpOptions')}</label>
-                      <textarea className="input" rows={2} value={sn.option_data} placeholder={t('pools.dhcpOptionsPlaceholder')}
-                        onChange={(e) => updateSubnet(i, 'option_data', e.target.value)}
-                        style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }} />
-                    </div>
-                  </div>
+                      {/* Row: lease time + DHCP options */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.leaseTime')}</label>
+                          <input className="input" value={sn.lease_time} placeholder={t('pools.leaseTimePlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'lease_time', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.dhcpOptions')}</label>
+                          <textarea className="input" rows={2} value={sn.option_data} placeholder={t('pools.dhcpOptionsPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'option_data', e.target.value)}
+                            style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }} />
+                        </div>
+                      </div>
+
+                      {/* IPv4 Reservation checkbox */}
+                      <div className="form-group" style={{ marginTop: 4 }}>
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                          <input type="checkbox" checked={sn.enable_reservation_v4}
+                            onChange={(e) => updateSubnet(i, 'enable_reservation_v4', e.target.checked)}
+                            style={{ width: 16, height: 16 }} />
+                          {t('pools.enableReservationV4')}
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 400 }}>
+                            — {t('pools.reservationHint')}
+                          </span>
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── IPv6 Fields ── */}
+                  {sn.ip_version === 6 && (
+                    <>
+                      {/* Row: subnet + prefix length */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.subnet')}</label>
+                          <input className="input" value={sn.subnet} placeholder="2001:db8::"
+                            onChange={(e) => updateSubnet(i, 'subnet', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.prefixLength')}</label>
+                          <input className="input" value={sn.netmask} placeholder={t('pools.prefixLengthPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'netmask', e.target.value)} />
+                        </div>
+                      </div>
+
+                      {/* Row: gateway + DNS */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.gateway')}</label>
+                          <input className="input" value={sn.gateway} placeholder="2001:db8::1"
+                            onChange={(e) => updateSubnet(i, 'gateway', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.dnsServers')}</label>
+                          <input className="input" value={sn.dns_servers} placeholder="2001:4860:4860::8888"
+                            onChange={(e) => updateSubnet(i, 'dns_servers', e.target.value)} />
+                        </div>
+                      </div>
+
+                      {/* IPv6 Mode radio group */}
+                      <div className="form-group">
+                        <label className="form-label">{t('pools.v6Mode')}</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                          {(['stateful', 'stateless', 'pd'] as const).map((mode) => (
+                            <label key={mode} style={{
+                              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                              padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                              background: sn.v6_mode === mode ? 'var(--accent-glow)' : 'transparent',
+                              border: `1px solid ${sn.v6_mode === mode ? 'var(--accent)' : 'var(--border)'}`,
+                            }}>
+                              <input type="radio" name={`v6mode-${i}`} value={mode}
+                                checked={sn.v6_mode === mode}
+                                onChange={() => updateSubnet(i, 'v6_mode', mode)}
+                                style={{ width: 14, height: 14 }} />
+                              {sn.v6_mode === 'stateful' ? t('pools.v6Stateful') : sn.v6_mode === 'stateless' ? t('pools.v6Stateless') : t('pools.v6PD')}
+                            </label>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                          {t('pools.v6ModeHint')}
+                        </div>
+                      </div>
+
+                      {/* PD prefix delegation (conditional) */}
+                      {sn.v6_mode === 'pd' && (
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.v6PDPrefix')}</label>
+                          <input className="input" value={sn.delegation_prefix}
+                            placeholder={t('pools.v6PDPrefixPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'delegation_prefix', e.target.value)} />
+                        </div>
+                      )}
+
+                      {/* Range (optional for stateless) */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">
+                            {t('pools.rangeStart')}
+                            {sn.v6_mode === 'stateless' ? '' : ' *'}
+                          </label>
+                          <input className="input" value={sn.range_start}
+                            placeholder={sn.v6_mode === 'stateless' ? '(SLAAC auto)' : '2001:db8::10'}
+                            onChange={(e) => updateSubnet(i, 'range_start', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.rangeEnd')}</label>
+                          <input className="input" value={sn.range_end}
+                            placeholder={sn.v6_mode === 'stateless' ? '(SLAAC auto)' : '2001:db8::ff'}
+                            onChange={(e) => updateSubnet(i, 'range_end', e.target.value)} />
+                        </div>
+                      </div>
+
+                      {/* Row: lease time + DHCP options */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.leaseTime')}</label>
+                          <input className="input" value={sn.lease_time} placeholder={t('pools.leaseTimePlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'lease_time', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">{t('pools.dhcpOptions')}</label>
+                          <textarea className="input" rows={2} value={sn.option_data} placeholder={t('pools.dhcpOptionsPlaceholder')}
+                            onChange={(e) => updateSubnet(i, 'option_data', e.target.value)}
+                            style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }} />
+                        </div>
+                      </div>
+
+                      {/* IPv6 Reservation checkbox */}
+                      <div className="form-group" style={{ marginTop: 4 }}>
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                          <input type="checkbox" checked={sn.enable_reservation_v6}
+                            onChange={(e) => updateSubnet(i, 'enable_reservation_v6', e.target.checked)}
+                            style={{ width: 16, height: 16 }} />
+                          {t('pools.enableReservationV6')}
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 400 }}>
+                            — {t('pools.reservationHint')}
+                          </span>
+                        </label>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
 

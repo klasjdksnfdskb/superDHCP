@@ -96,6 +96,9 @@ class Subnet(Base):
 
     # ── DHCP 选项 ──
     ip_version = Column(Integer, default=4, comment="IP 版本: 4 或 6")
+    v6_mode = Column(String(16), nullable=True, comment="IPv6模式: stateful/stateless/pd")
+    delegation_prefix = Column(String(64), nullable=True, comment="DHCPv6-PD委派前缀")
+    enable_reservation = Column(Boolean, default=False, comment="为该子网启用预留地址池")
     lease_time = Column(Integer, nullable=True, comment="覆盖全局租期(秒)")
     option_data = Column(JSONB, nullable=True, comment="自定义 DHCP 选项")
 

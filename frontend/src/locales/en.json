@@ -152,7 +152,23 @@
     "orgTag": "Org Structure Tag",
     "orgTagPlaceholder": "Select org structure tag",
     "noOrgTag": "None",
-    "poolInfo": "Basic Info"
+    "noOrgTags": "No org tags created yet",
+    "poolInfo": "Basic Info",
+    "ipv4Config": "IPv4 Configuration",
+    "ipv6Config": "IPv6 Configuration",
+    "prefixLength": "Prefix Length",
+    "prefixLengthPlaceholder": "e.g. 64",
+    "v6Mode": "IPv6 Assignment Mode",
+    "v6Stateful": "Stateful (DHCPv6)",
+    "v6Stateless": "Stateless (SLAAC + DHCPv6)",
+    "v6PD": "DHCP-PD Prefix Delegation",
+    "v6ModeHint": "Stateful: full DHCPv6 mgmt; Stateless: SLAAC address + DHCPv6 info; PD: delegate prefix to downstream router",
+    "v6PDPrefix": "Delegation Prefix",
+    "v6PDPrefixPlaceholder": "e.g. /56 or /48",
+    "enableReservationV4": "Enable IPv4 Reservations",
+    "enableReservationV6": "Enable IPv6 Reservations",
+    "reservationHint": "Bind fixed IPs to specific MAC addresses",
+    "noTagsLoaded": "Failed to load org tags"
   },
 
   "tags": {

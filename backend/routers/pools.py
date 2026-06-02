@@ -25,11 +25,14 @@ class SubnetCreate(BaseModel):
     netmask: str = Field(..., description="掩码/前缀长度 (如 24)")
     gateway: Optional[str] = None
     dns_servers: Optional[List[str]] = None
-    range_start: str = Field(..., description="可分配起始 IP")
-    range_end: str = Field(..., description="可分配结束 IP")
+    range_start: Optional[str] = None
+    range_end: Optional[str] = None
     ip_version: int = Field(default=4, ge=4, le=6)
     lease_time: Optional[int] = None
     option_data: Optional[dict] = None
+    v6_mode: Optional[str] = None  # "stateful" / "stateless" / "pd"
+    delegation_prefix: Optional[str] = None  # for PD mode
+    enable_reservation: Optional[bool] = False
 
 
 class PoolCreate(BaseModel):
@@ -125,11 +128,14 @@ async def create_pool(
                 netmask=sn.netmask,
                 gateway=sn.gateway,
                 dns_servers=sn.dns_servers,
-                range_start=sn.range_start,
-                range_end=sn.range_end,
+                range_start=sn.range_start or "0.0.0.0",
+                range_end=sn.range_end or "0.0.0.0",
                 ip_version=sn.ip_version,
                 lease_time=sn.lease_time,
                 option_data=sn.option_data,
+                v6_mode=sn.v6_mode,
+                delegation_prefix=sn.delegation_prefix,
+                enable_reservation=sn.enable_reservation or False,
             )
             db.add(subnet)
             created_subnets.append(str(subnet.id))
@@ -181,6 +187,9 @@ async def get_pool(
                 "range_start": str(s.range_start),
                 "range_end": str(s.range_end),
                 "ip_version": s.ip_version,
+                "v6_mode": s.v6_mode,
+                "delegation_prefix": s.delegation_prefix,
+                "enable_reservation": s.enable_reservation,
                 "lease_time": s.lease_time,
                 "excludes": [
                     {"id": str(e.id), "start": str(e.exclude_start),
@@ -262,11 +271,14 @@ async def add_subnet(
         netmask=req.netmask,
         gateway=req.gateway,
         dns_servers=req.dns_servers,
-        range_start=req.range_start,
-        range_end=req.range_end,
+        range_start=req.range_start or "0.0.0.0",
+        range_end=req.range_end or "0.0.0.0",
         ip_version=req.ip_version,
         lease_time=req.lease_time,
         option_data=req.option_data,
+        v6_mode=req.v6_mode,
+        delegation_prefix=req.delegation_prefix,
+        enable_reservation=req.enable_reservation or False,
     )
     db.add(subnet)
     await db.flush()

@@ -235,6 +235,15 @@ setup_postgres() {
         su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE superdhcp TO $APP_USER;\""
     }
 
+    # ── Schema Migrations ───────────────────────────────────────────
+    log_info "Applying database schema migrations..."
+    su - postgres -c "psql -d superdhcp -c \"
+        ALTER TABLE address_pools ADD COLUMN IF NOT EXISTS tag_id uuid REFERENCES custom_tags(id) ON DELETE SET NULL;
+        ALTER TABLE subnets ADD COLUMN IF NOT EXISTS v6_mode varchar(16);
+        ALTER TABLE subnets ADD COLUMN IF NOT EXISTS delegation_prefix varchar(64);
+        ALTER TABLE subnets ADD COLUMN IF NOT EXISTS enable_reservation boolean DEFAULT false;
+    \"" 2>/dev/null || log_warn "Migration may have already been applied, continuing..."
+
     log_info "PostgreSQL configured."
 }
 
