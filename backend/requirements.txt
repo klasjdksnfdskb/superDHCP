@@ -18,8 +18,8 @@ bcrypt<4.1.0  # passlib 1.7.4 不兼容 bcrypt>=4.1 (内部检测 72 字节限�
 python-multipart==0.0.6
 
 # Validation & Config
-pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
 # Redis (optional cache)
 redis==5.0.1

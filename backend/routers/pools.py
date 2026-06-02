@@ -20,6 +20,18 @@ router = APIRouter(prefix="/api/pools", tags=["地址池管理"])
 
 # ─── Pydantic Schemas ───
 
+class SubnetCreate(BaseModel):
+    subnet: str = Field(..., description="网段 (如 10.0.1.0)")
+    netmask: str = Field(..., description="掩码/前缀长度 (如 24)")
+    gateway: Optional[str] = None
+    dns_servers: Optional[List[str]] = None
+    range_start: str = Field(..., description="可分配起始 IP")
+    range_end: str = Field(..., description="可分配结束 IP")
+    ip_version: int = Field(default=4, ge=4, le=6)
+    lease_time: Optional[int] = None
+    option_data: Optional[dict] = None
+
+
 class PoolCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=128)
     description: Optional[str] = None
@@ -31,7 +43,7 @@ class PoolCreate(BaseModel):
     bootfile: Optional[str] = None
     next_server: Optional[str] = None
     # 创建时可以同时定义子网
-    subnets: Optional[List["SubnetCreate"]] = None
+    subnets: Optional[List[SubnetCreate]] = None
 
 
 class PoolUpdate(BaseModel):
@@ -41,18 +53,6 @@ class PoolUpdate(BaseModel):
     vlan_fallback: Optional[bool] = None
     domain_name: Optional[str] = None
     enabled: Optional[bool] = None
-
-
-class SubnetCreate(BaseModel):
-    subnet: str = Field(..., description="网段 (如 10.0.1.0)")
-    netmask: str = Field(..., description="掩码/前缀长度 (如 24)")
-    gateway: Optional[str] = None
-    dns_servers: Optional[List[str]] = None
-    range_start: str = Field(..., description="可分配起始 IP")
-    range_end: str = Field(..., description="可分配结束 IP")
-    ip_version: int = Field(default=4, ge=4, le=6)
-    lease_time: Optional[int] = None
-    option_data: Optional[dict] = None
 
 
 class ExcludeCreate(BaseModel):
