@@ -70,6 +70,7 @@ install_system_deps() {
         python3 python3-devel python3-pip \
         postgresql postgresql-server postgresql-devel \
         redis nginx rsync \
+        policycoreutils-python-utils \
         gcc gcc-c++ make \
         libffi-devel openssl-devel bzip2-devel \
         &>/dev/null && log_info "System packages installed." || {
@@ -265,6 +266,35 @@ EOF
     log_info "Config written to $CONFIG_DIR/.env"
 }
 
+# ── SELinux Configuration ───────────────────────────────────────
+configure_selinux() {
+    # Check if SELinux is enforcing
+    if command -v getenforce &>/dev/null && [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; then
+        log_info "SELinux is Enforcing. Applying context for Nginx..."
+
+        # Allow nginx to make outbound connections (proxy_pass to backend)
+        setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+
+        # Apply httpd context to frontend files so nginx can read them
+        if [ -d "$APP_DIR/frontend" ]; then
+            semanage fcontext -a -t httpd_sys_content_t "$APP_DIR/frontend(/.*)?" 2>/dev/null || \
+                chcon -R -t httpd_sys_content_t "$APP_DIR/frontend/" 2>/dev/null || true
+            restorecon -Rv "$APP_DIR/frontend/" 2>/dev/null || true
+            log_info "SELinux context applied to $APP_DIR/frontend/."
+        fi
+
+        # Also allow nginx to read backend if needed
+        if [ -d "$APP_DIR/backend" ]; then
+            chcon -R -t httpd_sys_content_t "$APP_DIR/backend/" 2>/dev/null || true
+        fi
+    elif command -v getenforce &>/dev/null; then
+        log_info "SELinux is $(getenforce). No context fix needed."
+    else
+        log_info "SELinux not detected."
+    fi
+}
+
+
 # ── Nginx Setup ────────────────────────────────────────────────────
 setup_nginx() {
     log_info "Configuring Nginx..."
@@ -447,6 +477,7 @@ main() {
     setup_postgres
     setup_redis
     setup_nginx
+    configure_selinux
     setup_service
     setup_kernel
     setup_firewall
