@@ -1,0 +1,89 @@
+import { useState, FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/hooks/useAuth';
+import { Server, Key, User } from 'lucide-react';
+
+export default function Login() {
+  const { t } = useTranslation();
+  const { login } = useAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await login(username, password);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || t('auth.changePasswordFailed');
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <Server size={48} color="var(--accent)" style={{ marginBottom: 12 }} />
+        </div>
+        <h1 className="login-title">{t('auth.title')}</h1>
+        <p className="login-subtitle">{t('auth.subtitle')}</p>
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">
+              <User size={14} style={{ display: 'inline', marginRight: 4 }} />
+              {t('auth.username')}
+            </label>
+            <input
+              className="input"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={t('auth.usernamePlaceholder')}
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">
+              <Key size={14} style={{ display: 'inline', marginRight: 4 }} />
+              {t('auth.password')}
+            </label>
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={t('auth.passwordPlaceholder')}
+            />
+          </div>
+
+          {error && (
+            <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={loading}
+            style={{ width: '100%', padding: '12px 0', fontSize: 15, marginTop: 8 }}
+          >
+            {loading ? t('auth.loggingIn') : t('auth.login')}
+          </button>
+        </form>
+
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 24 }}>
+          {t('auth.defaultAccount')}
+        </p>
+      </div>
+    </div>
+  );
+}

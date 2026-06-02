@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+dist/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Vendor (except keep the structure)
+vendor/pypi/
+vendor/npm-cache/
+vendor/npm-packages/
+
+# Docker (dev only)
+# docker-compose.yml is kept for dev reference

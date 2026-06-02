@@ -1,0 +1,75 @@
+# ⚠️ DEPRECATED
+# Docker Compose support has been removed in favor of direct openEuler deployment.
+# See deploy/ and install.sh for the recommended bare-metal installation.
+#
+# This file is kept for local development environments only.
+# For production openEuler, use: sudo bash install.sh
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: superdhcp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: superdhcp
+      POSTGRES_USER: superdhcp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-superdhcp_secure_pwd}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superdhcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: superdhcp-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: superdhcp-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://superdhcp:${DB_PASSWORD:-superdhcp_secure_pwd}@postgres:5432/superdhcp
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-change_this_in_production}
+      DHCPV4_INTERFACE: ${DHCPV4_INTERFACE:-eth0}
+      DHCPV6_INTERFACE: ${DHCPV6_INTERFACE:-eth0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./backend:/app
+      - dhcp_logs:/app/logs
+    network_mode: host
+
+  frontend:
+    build: ./frontend
+    container_name: superdhcp-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
+  dhcp_logs:
