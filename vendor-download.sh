@@ -12,7 +12,8 @@
 #    4. Build frontend static files into frontend/dist/
 # =============================================================================
 
-set -euo pipefail
+set -eu
+(set -o pipefail) 2>/dev/null && set -o pipefail
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'

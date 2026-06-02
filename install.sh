@@ -1,5 +1,6 @@
 #!/bin/bash
-set -euo pipefail
+set -eu
+(set -o pipefail) 2>/dev/null && set -o pipefail
 
 # =============================================================================
 # superDHCP - openEuler Offline Installation Script
