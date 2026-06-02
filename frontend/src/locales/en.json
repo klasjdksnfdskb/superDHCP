@@ -122,7 +122,31 @@
     "bindVlan": "Bind VLANs (comma-separated, e.g. 10,20,30)",
     "vlanPlaceholder": "10,20,30",
     "deleteConfirm": "Confirm deletion of pool \"{{name}}\"? This action cannot be undone.",
-    "percentUsed": "{{pct}}% used"
+    "percentUsed": "{{pct}}% used",
+
+    "subnetConfig": "Subnet Configuration",
+    "subnet": "Subnet Prefix",
+    "subnetPlaceholder": "e.g. 10.0.0.0",
+    "netmask": "Mask / Prefix Length",
+    "netmaskPlaceholder": "e.g. 24 (IPv4) or 64 (IPv6)",
+    "gateway": "Gateway",
+    "gatewayPlaceholder": "e.g. 10.0.0.1",
+    "dnsServers": "DNS Servers",
+    "dnsPlaceholder": "e.g. 8.8.8.8, 114.114.114.114",
+    "rangeStart": "Range Start",
+    "rangeEnd": "Range End",
+    "leaseTime": "Lease Time (seconds)",
+    "leaseTimePlaceholder": "Default: 86400 (24h)",
+    "dhcpOptions": "DHCP Options (JSON)",
+    "dhcpOptionsPlaceholder": "{\"option-43\": \"...\", \"option-82\": \"...\"}",
+    "ipVersion": "IP Version",
+    "addSubnet": "Add Subnet",
+    "removeSubnet": "Remove Subnet",
+    "noSubnets": "No subnets configured",
+    "orgTag": "Org Structure Tag",
+    "orgTagPlaceholder": "Select org structure tag",
+    "noOrgTag": "None",
+    "poolInfo": "Basic Info"
   },
 
   "tags": {

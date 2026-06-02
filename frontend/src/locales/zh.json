@@ -122,7 +122,31 @@
     "bindVlan": "绑定 VLAN (逗号分隔，如: 10,20,30)",
     "vlanPlaceholder": "10,20,30",
     "deleteConfirm": "确认删除地址池 \"{{name}}\"? 此操作不可恢复。",
-    "percentUsed": "{{pct}}% 已用"
+    "percentUsed": "{{pct}}% 已用",
+
+    "subnetConfig": "子网配置",
+    "subnet": "子网前缀",
+    "subnetPlaceholder": "例如: 10.0.0.0",
+    "netmask": "掩码/前缀长度",
+    "netmaskPlaceholder": "例如: 24 (IPv4) 或 64 (IPv6)",
+    "gateway": "网关地址",
+    "gatewayPlaceholder": "例如: 10.0.0.1",
+    "dnsServers": "DNS 服务器",
+    "dnsPlaceholder": "例如: 8.8.8.8, 114.114.114.114",
+    "rangeStart": "分配起始",
+    "rangeEnd": "分配结束",
+    "leaseTime": "租约时间(秒)",
+    "leaseTimePlaceholder": "默认: 86400 (24小时)",
+    "dhcpOptions": "DHCP Option 参数 (JSON)",
+    "dhcpOptionsPlaceholder": "{\"option-43\": \"...\", \"option-82\": \"...\"}",
+    "ipVersion": "IP 版本",
+    "addSubnet": "添加子网",
+    "removeSubnet": "移除子网",
+    "noSubnets": "暂未配置子网",
+    "orgTag": "关联组织架构",
+    "orgTagPlaceholder": "选择组织架构标签",
+    "noOrgTag": "不关联",
+    "poolInfo": "基本信息"
   },
 
   "tags": {

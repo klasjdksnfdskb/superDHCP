@@ -1,15 +1,21 @@
 import { useState, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
-import { Server, Key, User } from 'lucide-react';
+import { langSwitch } from '@/i18n';
+import { Server, Key, User, Languages } from 'lucide-react';
 
 export default function Login() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const toggleLang = () => {
+    const next = i18n.language.startsWith('zh') ? 'en' : 'zh';
+    langSwitch(next);
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,6 +33,16 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      {/* Language Switch - top right corner */}
+      <button
+        className="lang-switch-login"
+        onClick={toggleLang}
+        title={i18n.language.startsWith('zh') ? 'Switch to English' : '切换到中文'}
+      >
+        <Languages size={14} />
+        <span>{i18n.language.startsWith('zh') ? 'EN' : '中文'}</span>
+      </button>
+
       <div className="login-card">
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <Server size={48} color="var(--accent)" style={{ marginBottom: 12 }} />

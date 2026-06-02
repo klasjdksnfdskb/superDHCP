@@ -41,6 +41,13 @@ class AddressPool(Base):
         comment="作为默认池 (当 VLAN 未匹配到任何池时使用)"
     )
 
+    # ── 组织架构关联 ──
+    tag_id = Column(
+        UUID(as_uuid=True), ForeignKey("custom_tags.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="关联的组织架构标签 (如: 深圳机房→3楼→机架A12)"
+    )
+
     # ── 通用 DHCP 选项 ──
     domain_name = Column(String(255), nullable=True, comment="域名 (Option 15)")
     ntp_servers = Column(ARRAY(INET), nullable=True, comment="NTP 服务器 (Option 42)")
@@ -56,6 +63,7 @@ class AddressPool(Base):
     subnets = relationship("Subnet", back_populates="pool", cascade="all, delete-orphan", lazy="selectin")
     reservations = relationship("AddressReservation", back_populates="pool", cascade="all, delete-orphan", lazy="selectin")
     leases = relationship("DHCPLease", back_populates="pool", lazy="selectin")
+    tag = relationship("CustomTag", lazy="selectin")
 
     def __repr__(self):
         return f"<Pool {self.name} VLANs={self.vlan_ids}>"

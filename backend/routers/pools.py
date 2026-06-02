@@ -25,10 +25,13 @@ class PoolCreate(BaseModel):
     description: Optional[str] = None
     vlan_ids: Optional[List[int]] = None
     vlan_fallback: bool = False
+    tag_id: Optional[str] = None  # UUID of CustomTag
     domain_name: Optional[str] = None
     ntp_servers: Optional[List[str]] = None
     bootfile: Optional[str] = None
     next_server: Optional[str] = None
+    # 创建时可以同时定义子网
+    subnets: Optional[List["SubnetCreate"]] = None
 
 
 class PoolUpdate(BaseModel):
@@ -83,24 +86,61 @@ async def create_pool(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """创建地址池"""
+    """创建地址池，可选包含子网配置"""
     existing = await db.execute(
         select(AddressPool).where(AddressPool.name == req.name)
     )
     if existing.scalars().first():
         raise HTTPException(status_code=409, detail="Pool name already exists")
 
+    # 验证 tag_id
+    tag_uuid = None
+    if req.tag_id:
+        try:
+            tag_uuid = UUID(req.tag_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid tag_id")
+
     pool = AddressPool(
         name=req.name,
         description=req.description,
         vlan_ids=req.vlan_ids or [],
         vlan_fallback=req.vlan_fallback,
+        tag_id=tag_uuid,
         domain_name=req.domain_name,
+        ntp_servers=req.ntp_servers,
+        bootfile=req.bootfile,
+        next_server=req.next_server,
     )
     db.add(pool)
     await db.flush()
 
-    return {"id": str(pool.id), "name": pool.name, "message": "Pool created"}
+    # 可选：创建时直接添加子网
+    created_subnets = []
+    if req.subnets:
+        for sn in req.subnets:
+            subnet = Subnet(
+                pool_id=pool.id,
+                subnet=sn.subnet,
+                netmask=sn.netmask,
+                gateway=sn.gateway,
+                dns_servers=sn.dns_servers,
+                range_start=sn.range_start,
+                range_end=sn.range_end,
+                ip_version=sn.ip_version,
+                lease_time=sn.lease_time,
+                option_data=sn.option_data,
+            )
+            db.add(subnet)
+            created_subnets.append(str(subnet.id))
+        await db.flush()
+
+    return {
+        "id": str(pool.id),
+        "name": pool.name,
+        "subnets": created_subnets,
+        "message": "Pool created"
+    }
 
 
 @router.get("/{pool_id}")
@@ -126,6 +166,8 @@ async def get_pool(
         "description": pool.description,
         "vlan_ids": pool.vlan_ids,
         "vlan_fallback": pool.vlan_fallback,
+        "tag_id": str(pool.tag_id) if pool.tag_id else None,
+        "tag_name": pool.tag.name if pool.tag else None,
         "domain_name": pool.domain_name,
         "enabled": pool.enabled,
         "stats": stats,

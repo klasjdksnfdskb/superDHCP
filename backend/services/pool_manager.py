@@ -72,6 +72,8 @@ class PoolManager:
                 "name": pool.name,
                 "vlan_ids": pool.vlan_ids,
                 "vlan_fallback": pool.vlan_fallback,
+                "tag_id": str(pool.tag_id) if pool.tag_id else None,
+                "tag_name": pool.tag.name if pool.tag else None,
                 "description": pool.description,
                 "stats": stats,
                 "subnet_count": len(pool.subnets),
