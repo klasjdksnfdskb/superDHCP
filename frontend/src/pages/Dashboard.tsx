@@ -49,15 +49,28 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    dashboardAPI.stats().then(({ data }) => {
-      setData(data);
-    }).catch(console.error).finally(() => setLoading(false));
+    dashboardAPI.stats().then((res) => {
+      setData(res.data);
+    }).catch((err: unknown) => {
+      const e = err as { code?: string; message?: string };
+      setError(e.code === 'ERR_NETWORK' ? t('common.networkError') : (e.message || t('common.loadError')));
+      console.error('Dashboard load failed:', e.message || err);
+    }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="empty">{t('common.loading')}</div>;
-  if (!data) return <div className="empty">{t('common.loading')}</div>;
+  if (error) return (
+    <div className="empty" style={{ color: 'var(--danger)' }}>
+      <p>{error}</p>
+      <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>
+        {t('common.retry')}
+      </button>
+    </div>
+  );
+  if (!data) return <div className="empty">{t('common.noData')}</div>;
 
   return (
     <div>

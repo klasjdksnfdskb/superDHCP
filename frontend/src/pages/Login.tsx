@@ -24,7 +24,17 @@ export default function Login() {
     try {
       await login(username, password);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || t('auth.loginFailed');
+      let msg = t('auth.loginFailed');
+      const e = err as { code?: string; message?: string; response?: { status?: number; data?: { detail?: string } } };
+      if (e.code === 'ERR_NETWORK' || e.message?.includes('Network')) {
+        msg = t('auth.networkError');
+      } else if (e.response?.status === 401) {
+        msg = t('auth.loginFailed');
+      } else if (e.response?.data?.detail) {
+        msg = e.response.data.detail;
+      } else if (e.message) {
+        msg = e.message;
+      }
       setError(msg);
     } finally {
       setLoading(false);

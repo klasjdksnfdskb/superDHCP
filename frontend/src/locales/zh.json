@@ -1,6 +1,10 @@
 {
   "common": {
     "loading": "加载中...",
+    "noData": "暂无数据",
+    "loadError": "数据加载失败",
+    "networkError": "无法连接服务器，请检查网络",
+    "retry": "重试",
     "notFound": "未找到",
     "save": "保存",
     "cancel": "取消",
@@ -40,7 +44,9 @@
     "passwordMinLength": "新密码至少 8 位",
     "passwordMismatch": "两次密码不一致",
     "changePasswordFailed": "修改失败",
-    "loginFailed": "登录失败，请检查用户名和密码",
+    "loginFailed": "密码输入错误，请重新输入密码",
+    "networkError": "无法连接服务器，请检查网络",
+    "serverError": "服务器错误，请稍后重试",
     "defaultAccount": "默认账户: admin / admin@superDHCP2024",
     "accountInfo": "账户信息",
     "role": "角色"

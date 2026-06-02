@@ -1,6 +1,10 @@
 {
   "common": {
     "loading": "Loading...",
+    "noData": "No Data",
+    "loadError": "Failed to load data",
+    "networkError": "Cannot connect to server, check network",
+    "retry": "Retry",
     "notFound": "Not Found",
     "save": "Save",
     "cancel": "Cancel",
@@ -40,7 +44,9 @@
     "passwordMinLength": "New password must be at least 8 characters",
     "passwordMismatch": "Passwords do not match",
     "changePasswordFailed": "Failed to change password",
-    "loginFailed": "Login failed, please check username and password",
+    "loginFailed": "Incorrect password, please retry",
+    "networkError": "Cannot connect to server, check network",
+    "serverError": "Server error, please try later",
     "defaultAccount": "Default: admin / admin@superDHCP2024",
     "accountInfo": "Account Info",
     "role": "Role"
