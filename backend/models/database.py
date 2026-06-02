@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession
 )
 from sqlalchemy.orm import DeclarativeBase
-from config import settings
+from app_settings import settings
 
 
 engine = create_async_engine(

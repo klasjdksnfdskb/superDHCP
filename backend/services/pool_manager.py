@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.pool import AddressPool, Subnet, AddressExclude, AddressReservation
-from ..models.lease import DHCPLease, LeaseState
+from models.pool import AddressPool, Subnet, AddressExclude, AddressReservation
+from models.lease import DHCPLease, LeaseState
 
 logger = logging.getLogger(__name__)
 

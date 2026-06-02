@@ -18,7 +18,7 @@ export default function Login() {
     try {
       await login(username, password);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || t('auth.changePasswordFailed');
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || t('auth.loginFailed');
       setError(msg);
     } finally {
       setLoading(false);

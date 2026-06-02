@@ -40,6 +40,7 @@
     "passwordMinLength": "New password must be at least 8 characters",
     "passwordMismatch": "Passwords do not match",
     "changePasswordFailed": "Failed to change password",
+    "loginFailed": "Login failed, please check username and password",
     "defaultAccount": "Default: admin / admin@superDHCP2024",
     "accountInfo": "Account Info",
     "role": "Role"

@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.database import get_db
-from ..models.user import User, UserRole, AuditLog
-from ..config import settings
+from models.database import get_db
+from models.user import User, UserRole, AuditLog
+from app_settings import settings
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 

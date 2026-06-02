@@ -5,10 +5,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.database import get_db
-from ..models.user import User
-from ..services.lease_manager import LeaseManager
-from ..services.pool_manager import PoolManager
+from models.database import get_db
+from models.user import User
+from services.lease_manager import LeaseManager
+from services.pool_manager import PoolManager
 from .auth import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
@@ -44,7 +44,7 @@ async def get_activity(
     db: AsyncSession = Depends(get_db),
 ):
     """获取最近 DHCP 活动摘要"""
-    from ..models.lease import DHCPLease, LeaseState
+    from models.lease import DHCPLease, LeaseState
     from sqlalchemy import select, func
     from datetime import datetime, timezone, timedelta
 

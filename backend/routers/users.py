@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.database import get_db
-from ..models.user import User, UserRole
+from models.database import get_db
+from models.user import User, UserRole
 from .auth import (
     get_current_user, require_admin, require_superadmin,
     hash_password, verify_password

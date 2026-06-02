@@ -18,8 +18,8 @@ from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..models.lease import DHCPLease, LeaseState, DHCPv6Mode
-from ..models.pool import Subnet
+from models.lease import DHCPLease, LeaseState, DHCPv6Mode
+from models.pool import Subnet
 
 logger = logging.getLogger(__name__)
 

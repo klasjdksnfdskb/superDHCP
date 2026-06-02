@@ -14,6 +14,7 @@ alembic==1.13.1
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt<4.1.0  # passlib 1.7.4 不兼容 bcrypt>=4.1 (内部检测 72 字节限制)
 python-multipart==0.0.6
 
 # Validation & Config

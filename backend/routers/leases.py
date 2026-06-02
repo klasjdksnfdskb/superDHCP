@@ -9,9 +9,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import io
 
-from ..models.database import get_db
-from ..models.user import User
-from ..services.lease_manager import LeaseManager
+from models.database import get_db
+from models.user import User
+from services.lease_manager import LeaseManager
 from .auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/leases", tags=["租约管理"])
@@ -111,7 +111,7 @@ async def release_lease(
     db: AsyncSession = Depends(get_db),
 ):
     """手动释放租约"""
-    from ..services.pool_manager import PoolManager
+    from services.pool_manager import PoolManager
     pool_mgr = PoolManager(db)
     success = await pool_mgr.release_ipv4(mac_address)
     if success:

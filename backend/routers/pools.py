@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.database import get_db
-from ..models.pool import AddressPool, Subnet, AddressExclude, AddressReservation
-from ..models.user import User
-from ..services.pool_manager import PoolManager
+from models.database import get_db
+from models.pool import AddressPool, Subnet, AddressExclude, AddressReservation
+from models.user import User
+from services.pool_manager import PoolManager
 from .auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/pools", tags=["地址池管理"])

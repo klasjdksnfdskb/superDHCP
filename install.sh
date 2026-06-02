@@ -285,17 +285,16 @@ configure_selinux() {
             log_info "SELinux context applied to $APP_DIR/frontend/."
         fi
 
-        # CRITICAL: parent directory needs httpd_sys_content_t too,
-        # otherwise nginx cannot traverse to frontend/
-        semanage fcontext -a -t httpd_sys_content_t "$APP_DIR(/.*)?" 2>/dev/null || \
+        # Apply httpd context only to the parent directory itself
+        # (not recursive) so nginx can traverse to frontend/
+        semanage fcontext -a -t httpd_sys_content_t "$APP_DIR" 2>/dev/null || \
             chcon -t httpd_sys_content_t "$APP_DIR/" 2>/dev/null || true
-        restorecon -Rv "$APP_DIR/" 2>/dev/null || true
+        restorecon -v "$APP_DIR/" 2>/dev/null || true
         log_info "SELinux context applied to $APP_DIR/ (parent traversal)."
 
-        # Also allow nginx to read backend if needed
-        if [ -d "$APP_DIR/backend" ]; then
-            chcon -R -t httpd_sys_content_t "$APP_DIR/backend/" 2>/dev/null || true
-        fi
+        # NOTE: Do NOT apply httpd_sys_content_t to backend/ — nginx
+        # accesses backend via proxy_pass, and httpd_sys_content_t
+        # on .venv/bin/python will cause systemd status=203/EXEC.
     elif command -v getenforce &>/dev/null; then
         log_info "SELinux is $(getenforce). No context fix needed."
     else

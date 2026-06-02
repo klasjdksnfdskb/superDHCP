@@ -12,12 +12,12 @@ DHCP 协议服务主进程 — 异步 UDP 服务
 import asyncio
 import logging
 from typing import Optional
-from config import settings
+from app_settings import settings
 from .dhcpv4 import DHCPPacket, DHCPv4Engine, DHCPDISCOVER, DHCPREQUEST, DHCPRELEASE, DHCPINFORM
 from .dhcpv6 import DHCPv6Packet, DHCPv6Engine, SOLICIT, REQUEST, RENEW, RELEASE, INFORMATION_REQUEST
 from .pool_manager import PoolManager
 from .lease_manager import LeaseManager
-from ..models.database import AsyncSessionLocal
+from models.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 

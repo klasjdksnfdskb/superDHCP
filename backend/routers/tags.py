@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.database import get_db
-from ..models.tags import CustomTag, TagCategory
-from ..models.user import User
+from models.database import get_db
+from models.tags import CustomTag, TagCategory
+from models.user import User
 from .auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/tags", tags=["组织架构标签"])

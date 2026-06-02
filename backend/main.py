@@ -10,7 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from config import settings
+from app_settings import settings
 from models.database import init_db, engine
 from routers import (
     auth_router,
