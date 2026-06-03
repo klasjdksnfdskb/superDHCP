@@ -25,12 +25,28 @@ export default function Login() {
       await login(username, password);
     } catch (err: unknown) {
       let msg = t('auth.loginFailed');
-      const e = err as { code?: string; message?: string; response?: { status?: number; data?: { detail?: string } } };
+      const e = err as {
+        code?: string;
+        message?: string;
+        response?: {
+          status?: number;
+          data?: { detail?: string | { msg: string; loc: string[]; type: string }[] };
+        };
+      };
       if (e.code === 'ERR_NETWORK' || e.message?.includes('Network')) {
         msg = t('auth.networkError');
       } else if (e.response?.status === 401) {
         msg = t('auth.loginFailed');
-      } else if (e.response?.data?.detail) {
+      } else if (e.response?.status === 422) {
+        // Pydantic validation error: detail is an array
+        const detail = e.response?.data?.detail;
+        if (Array.isArray(detail) && detail.length > 0) {
+          const field = detail[0].loc.slice(-1)[0] || '';
+          msg = field ? `${field}: ${detail[0].msg}` : detail[0].msg;
+        } else {
+          msg = t('auth.loginFailed');
+        }
+      } else if (e.response?.data?.detail && typeof e.response.data.detail === 'string') {
         msg = e.response.data.detail;
       } else if (e.message) {
         msg = e.message;
