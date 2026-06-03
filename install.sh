@@ -140,6 +140,13 @@ setup_frontend() {
         return 0
     fi
 
+    # Fallback: dist might be in deploy-package (e.g. WinSCP skipped dist/ folder)
+    if [ -d "$PROJECT_DIR/deploy-package/frontend/dist" ] && [ -f "$PROJECT_DIR/deploy-package/frontend/dist/index.html" ]; then
+        log_info "Using pre-built frontend from deploy-package/frontend/dist/"
+        rsync -a --delete "$PROJECT_DIR/deploy-package/frontend/dist/" "$APP_DIR/frontend/"
+        return 0
+    fi
+
     # Otherwise, try to build from offline packages
     if [ -f "$PROJECT_DIR/frontend/setup.sh" ]; then
         log_info "Running frontend offline setup..."
