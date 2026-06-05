@@ -168,6 +168,8 @@
     "enableReservationV4": "启用 IPv4 预留地址",
     "enableReservationV6": "启用 IPv6 预留地址",
     "reservationHint": "为特定MAC绑定固定IP地址",
+    "reservationStart": "预留范围起始",
+    "reservationEnd": "预留范围结束",
     "noTagsLoaded": "组织架构标签加载失败"
   },
 

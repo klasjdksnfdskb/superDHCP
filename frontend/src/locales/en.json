@@ -168,6 +168,8 @@
     "enableReservationV4": "Enable IPv4 Reservations",
     "enableReservationV6": "Enable IPv6 Reservations",
     "reservationHint": "Bind fixed IPs to specific MAC addresses",
+    "reservationStart": "Reserved Range Start",
+    "reservationEnd": "Reserved Range End",
     "noTagsLoaded": "Failed to load org tags"
   },
 

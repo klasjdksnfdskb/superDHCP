@@ -43,7 +43,11 @@ interface SubnetDraft {
   v6_mode: string;
   delegation_prefix: string;
   enable_reservation_v4: boolean;
+  reservation_start_v4: string;
+  reservation_end_v4: string;
   enable_reservation_v6: boolean;
+  reservation_start_v6: string;
+  reservation_end_v6: string;
 }
 
 const emptySubnet = (v: number): SubnetDraft => ({
@@ -59,7 +63,11 @@ const emptySubnet = (v: number): SubnetDraft => ({
   v6_mode: 'stateful',
   delegation_prefix: '',
   enable_reservation_v4: false,
+  reservation_start_v4: '',
+  reservation_end_v4: '',
   enable_reservation_v6: false,
+  reservation_start_v6: '',
+  reservation_end_v6: '',
 });
 
 export default function PoolManagement() {
@@ -141,6 +149,12 @@ export default function PoolManagement() {
             v6_mode: sn.ip_version === 6 ? sn.v6_mode : undefined,
             delegation_prefix: sn.ip_version === 6 ? sn.delegation_prefix || undefined : undefined,
             enable_reservation: sn.ip_version === 4 ? sn.enable_reservation_v4 : sn.enable_reservation_v6,
+            reservation_start: sn.ip_version === 4
+              ? (sn.reservation_start_v4.trim() || undefined)
+              : (sn.reservation_start_v6.trim() || undefined),
+            reservation_end: sn.ip_version === 4
+              ? (sn.reservation_end_v4.trim() || undefined)
+              : (sn.reservation_end_v6.trim() || undefined),
           })),
       };
       await poolsAPI.create(payload);
@@ -428,6 +442,22 @@ export default function PoolManagement() {
                           </span>
                         </label>
                       </div>
+                      {sn.enable_reservation_v4 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+                          <div className="form-group">
+                            <label className="form-label">{t('pools.reservationStart')}</label>
+                            <input className="input" value={sn.reservation_start_v4}
+                              placeholder="10.0.0.1"
+                              onChange={(e) => updateSubnet(i, 'reservation_start_v4', e.target.value)} />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">{t('pools.reservationEnd')}</label>
+                            <input className="input" value={sn.reservation_end_v4}
+                              placeholder="10.0.0.50"
+                              onChange={(e) => updateSubnet(i, 'reservation_end_v4', e.target.value)} />
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -477,7 +507,7 @@ export default function PoolManagement() {
                                 checked={sn.v6_mode === mode}
                                 onChange={() => updateSubnet(i, 'v6_mode', mode)}
                                 style={{ width: 14, height: 14 }} />
-                              {sn.v6_mode === 'stateful' ? t('pools.v6Stateful') : sn.v6_mode === 'stateless' ? t('pools.v6Stateless') : t('pools.v6PD')}
+                              {mode === 'stateful' ? t('pools.v6Stateful') : mode === 'stateless' ? t('pools.v6Stateless') : t('pools.v6PD')}
                             </label>
                           ))}
                         </div>
@@ -542,6 +572,22 @@ export default function PoolManagement() {
                           </span>
                         </label>
                       </div>
+                      {sn.enable_reservation_v6 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+                          <div className="form-group">
+                            <label className="form-label">{t('pools.reservationStart')}</label>
+                            <input className="input" value={sn.reservation_start_v6}
+                              placeholder="2001:db8::1"
+                              onChange={(e) => updateSubnet(i, 'reservation_start_v6', e.target.value)} />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">{t('pools.reservationEnd')}</label>
+                            <input className="input" value={sn.reservation_end_v6}
+                              placeholder="2001:db8::50"
+                              onChange={(e) => updateSubnet(i, 'reservation_end_v6', e.target.value)} />
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
