@@ -22,6 +22,12 @@ router = APIRouter(prefix="/api/pools", tags=["地址池管理"])
 
 # ─── Pydantic Schemas ───
 
+class ExcludeCreate(BaseModel):
+    exclude_start: str
+    exclude_end: str
+    reason: Optional[str] = None
+
+
 class SubnetCreate(BaseModel):
     subnet: str = Field(..., description="网段 (如 10.0.1.0)")
     netmask: str = Field(..., description="掩码/前缀长度 (如 24)")
@@ -61,12 +67,6 @@ class PoolUpdate(BaseModel):
     vlan_fallback: Optional[bool] = None
     domain_name: Optional[str] = None
     enabled: Optional[bool] = None
-
-
-class ExcludeCreate(BaseModel):
-    exclude_start: str
-    exclude_end: str
-    reason: Optional[str] = None
 
 
 class ReservationCreate(BaseModel):

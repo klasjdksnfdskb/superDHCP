@@ -6,7 +6,8 @@ from .database import Base, engine, AsyncSessionLocal, get_db, init_db
 from .lease import DHCPLease, LeaseState, DHCPv6Mode
 from .pool import AddressPool, Subnet, AddressExclude, AddressReservation
 from .tags import CustomTag, TagCategory
-from .user import User, UserRole, AuditLog
+from .user import User, UserRole
+from .audit import AuditLog
 
 __all__ = [
     # Database

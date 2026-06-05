@@ -13,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from models.user import User, UserRole, AuditLog
+from models.user import User, UserRole
+from models.audit import AuditLog
 from app_settings import settings
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])

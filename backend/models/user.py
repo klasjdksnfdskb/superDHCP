@@ -44,21 +44,4 @@ class User(Base):
         return f"<User {self.username} role={self.role}>"
 
 
-class AuditLog(Base):
-    """操作审计日志"""
 
-    __tablename__ = "audit_logs"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=True, index=True)
-    username = Column(String(64), nullable=True)
-    action = Column(String(64), nullable=False, comment="操作类型: login/logout/create_pool/...")
-    resource_type = Column(String(64), nullable=True, comment="资源类型: pool/lease/tag/user")
-    resource_id = Column(String(255), nullable=True, comment="资源标识")
-    detail = Column(String(1024), nullable=True, comment="操作详情 JSON")
-    ip_address = Column(String(45), nullable=True)
-
-    created_at = Column(
-        DateTime(timezone=True), default=datetime.utcnow,
-        nullable=False, index=True
-    )
