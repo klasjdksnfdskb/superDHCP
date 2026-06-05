@@ -154,7 +154,7 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
 
     # 审计日志
     audit = AuditLog(
-        user_id=user.id,
+        user_id=str(user.id),
         username=user.username,
         action="login",
         ip_address=request.client.host if request.client else None,
