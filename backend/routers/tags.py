@@ -52,7 +52,7 @@ async def list_tags(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取标签列表"""
+    """获取标签列表（扁平，适用于下拉选择器）"""
     if root_only:
         result = await db.execute(
             select(CustomTag).where(CustomTag.parent_id.is_(None))
@@ -64,12 +64,58 @@ async def list_tags(
             .order_by(CustomTag.sort_order)
         )
     else:
+        # Load ALL tags in one query — we compute full_path & child_count in memory
         result = await db.execute(
-            select(CustomTag).order_by(CustomTag.level, CustomTag.sort_order)
+            select(CustomTag.id, CustomTag.name, CustomTag.slug,
+                   CustomTag.parent_id, CustomTag.level,
+                   CustomTag.description, CustomTag.color, CustomTag.sort_order)
+            .order_by(CustomTag.level, CustomTag.sort_order)
         )
 
-    tags = result.scalars().all()
+    # For the "all tags" case, compute full_path and child_count in memory
+    if not root_only and not parent_id:
+        rows = result.all()
+        # Build id → name map for fast path resolution
+        id_to_name: dict = {}
+        id_to_parent: dict = {}
+        tags_out: list = []
+        for row in rows:
+            tid = str(row[0])
+            id_to_name[tid] = row[1]
+            id_to_parent[tid] = str(row[3]) if row[3] else None
+            tags_out.append({
+                "id": tid,
+                "name": row[1],
+                "slug": row[2],
+                "parent_id": id_to_parent[tid],
+                "level": row[4],
+                "description": row[5],
+                "color": row[6],
+                "sort_order": row[7],
+            })
+        # Compute full_path
+        def _resolve_path(tag_id: str) -> str:
+            parts = []
+            cur = tag_id
+            visited: set = set()
+            while cur and cur not in visited:
+                visited.add(cur)
+                parts.append(id_to_name.get(cur, "?"))
+                cur = id_to_parent.get(cur)  # type: ignore[assignment]
+            return "/".join(reversed(parts))
+        # Compute child_count
+        child_counts: dict = {}
+        for t in tags_out:
+            pid = t["parent_id"]
+            if pid:
+                child_counts[pid] = child_counts.get(pid, 0) + 1
+        for t in tags_out:
+            t["full_path"] = _resolve_path(t["id"])
+            t["child_count"] = child_counts.get(t["id"], 0)
+        return tags_out
 
+    # root_only / parent_id mode (filtered subset)
+    tags = result.scalars().all()
     return [
         {
             "id": str(t.id),
