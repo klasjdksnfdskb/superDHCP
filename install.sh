@@ -137,6 +137,10 @@ setup_frontend() {
     if [ -d "$PROJECT_DIR/frontend/dist" ] && [ -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
         log_info "Using pre-built frontend from frontend/dist/"
         rsync -a --delete "$PROJECT_DIR/frontend/dist/" "$APP_DIR/frontend/"
+        # Ensure nginx can read (critical: setup_dirs already chowned APP_DIR but
+        # frontend/ didn't exist then, so new files are owned by root)
+        chown -R "$APP_USER:$APP_USER" "$APP_DIR/frontend"
+        chmod -R u+rwX,go+rX "$APP_DIR/frontend"
         return 0
     fi
 
@@ -144,6 +148,8 @@ setup_frontend() {
     if [ -d "$PROJECT_DIR/deploy-package/frontend/dist" ] && [ -f "$PROJECT_DIR/deploy-package/frontend/dist/index.html" ]; then
         log_info "Using pre-built frontend from deploy-package/frontend/dist/"
         rsync -a --delete "$PROJECT_DIR/deploy-package/frontend/dist/" "$APP_DIR/frontend/"
+        chown -R "$APP_USER:$APP_USER" "$APP_DIR/frontend"
+        chmod -R u+rwX,go+rX "$APP_DIR/frontend"
         return 0
     fi
 
@@ -339,6 +345,28 @@ server {
     root /opt/superDHCP/frontend;
     index index.html;
 
+    # ── Explicit MIME types (CRITICAL: browsers refuse ES modules without correct Content-Type) ──
+    types {
+        text/html                             html htm shtml;
+        text/css                              css;
+        application/javascript                js mjs;
+        application/json                      json;
+        image/svg+xml                         svg svgz;
+        image/png                             png;
+        image/jpeg                            jpeg jpg;
+        image/x-icon                          ico;
+        font/woff2                            woff2;
+    }
+
+    # ── Static assets: immutable cache ──
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri =404;
+    }
+
+    # ── SPA routing ──
     location / {
         try_files $uri $uri/ /index.html;
 
@@ -349,7 +377,7 @@ server {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     }
 
-    # Backend API proxy
+    # ── Backend API proxy ──
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -506,6 +534,18 @@ main() {
     setup_redis
     setup_nginx
     configure_selinux
+    
+    # ── Final permission hardening: ensure nginx can read frontend ──
+    log_info "Verifying frontend permissions..."
+    if [ -d "$APP_DIR/frontend" ]; then
+        chown -R "$APP_USER:$APP_USER" "$APP_DIR/frontend"
+        chmod -R u+rwX,go+rX "$APP_DIR/frontend"
+        # Verify nginx can traverse
+        chmod 755 "$APP_DIR"
+        log_info "Frontend permissions: $(stat -c '%U:%G %a' "$APP_DIR/frontend/index.html" 2>/dev/null || echo 'N/A')"
+        log_info "Frontend files: $(ls "$APP_DIR/frontend/assets/" 2>/dev/null | xargs echo || echo 'MISSING!')"
+    fi
+    
     setup_service
     setup_kernel
     setup_firewall

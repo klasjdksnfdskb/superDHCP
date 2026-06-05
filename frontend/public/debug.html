@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>superDHCP — 部署诊断</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0e17; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 32px; min-height: 100vh; }
+h1 { color: #3b82f6; margin-bottom: 4px; }
+.sub { color: #64748b; font-size: 13px; margin-bottom: 24px; }
+.card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+.card h3 { font-size: 15px; margin-bottom: 12px; }
+.ok { color: #22c55e; }
+.fail { color: #ef4444; }
+.warn { color: #f59e0b; }
+.row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1f2937; font-size: 13px; }
+.row:last-child { border-bottom: none; }
+.label { color: #94a3b8; }
+.mono { font-family: monospace; color: #60a5fa; }
+a { color: #3b82f6; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<h1>🔧 superDHCP 部署诊断</h1>
+<p class="sub">此页面不依赖 JavaScript 框架，用于排查白屏问题</p>
+
+<div class="card">
+  <h3>📁 静态文件</h3>
+  <div class="row"><span class="label">index.html</span><span id="check-html">⏳</span></div>
+  <div class="row"><span class="label">JS Bundle</span><span id="check-js">⏳</span></div>
+  <div class="row"><span class="label">CSS Bundle</span><span id="check-css">⏳</span></div>
+</div>
+
+<div class="card">
+  <h3>🔌 后端 API</h3>
+  <div class="row"><span class="label">/api/health</span><span id="check-health">⏳</span></div>
+  <div class="row"><span class="label">/api/docs</span><span><a href="/api/docs" target="_blank">Open Swagger →</a></span></div>
+</div>
+
+<div class="card">
+  <h3>🚀 操作</h3>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <a href="/" style="padding:8px 16px;background:#3b82f6;border-radius:8px;color:#fff;font-size:14px;">打开管理后台 →</a>
+    <a href="javascript:localStorage.clear();location.href='/'" style="padding:8px 16px;border:1px solid #ef4444;border-radius:8px;color:#ef4444;font-size:14px;">清除缓存并重试</a>
+  </div>
+</div>
+
+<script>
+async function checkFile(url, id) {
+  const el = document.getElementById(id);
+  try {
+    const r = await fetch(url, { method: 'HEAD' });
+    if (r.ok) { el.innerHTML = '<span class=ok>✅ OK (' + r.headers.get('content-type') + ')</span>'; return true; }
+    else { el.innerHTML = '<span class=fail>❌ HTTP ' + r.status + '</span>'; return false; }
+  } catch(e) { el.innerHTML = '<span class=fail>❌ ' + e.message + '</span>'; return false; }
+}
+async function checkAPI(url, id) {
+  const el = document.getElementById(id);
+  try {
+    const r = await fetch(url);
+    if (r.ok) {
+      const data = await r.json();
+      el.innerHTML = '<span class=ok>✅ OK — v' + (data.version || '?') + '</span>';
+      return true;
+    } else { el.innerHTML = '<span class=fail>❌ HTTP ' + r.status + '</span>'; return false; }
+  } catch(e) { el.innerHTML = '<span class=fail>❌ ' + e.message + '</span>'; return false; }
+}
+
+// Run checks
+(async () => {
+  // First find the JS/CSS filenames from the index.html
+  try {
+    const r = await fetch('/index.html');
+    const html = await r.text();
+    const jsMatch = html.match(/src="(\/assets\/[^"]+\.js)"/);
+    const cssMatch = html.match(/href="(\/assets\/[^"]+\.css)"/);
+    
+    document.getElementById('check-html').innerHTML = '<span class=ok>✅ OK</span>';
+    
+    if (jsMatch) await checkFile(jsMatch[1], 'check-js');
+    else document.getElementById('check-js').innerHTML = '<span class=fail>❌ 未找到 JS 引用</span>';
+    
+    if (cssMatch) await checkFile(cssMatch[1], 'check-css');
+    else document.getElementById('check-css').innerHTML = '<span class=warn>⚠️ 未找到 CSS 引用 (无伤大雅)</span>';
+  } catch(e) {
+    document.getElementById('check-html').innerHTML = '<span class=fail>❌ ' + e.message + '</span>';
+  }
+  
+  await checkAPI('/api/health', 'check-health');
+})();
+</script>
+</body>
+</html>
