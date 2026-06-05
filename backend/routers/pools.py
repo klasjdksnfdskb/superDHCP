@@ -13,6 +13,8 @@ from models.database import get_db
 from models.pool import AddressPool, Subnet, AddressExclude, AddressReservation
 from models.user import User
 from services.pool_manager import PoolManager
+from services.redis_client import cache_delete
+from services.audit_service import audit_log
 from .auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/pools", tags=["地址池管理"])
@@ -33,6 +35,9 @@ class SubnetCreate(BaseModel):
     v6_mode: Optional[str] = None  # "stateful" / "stateless" / "pd"
     delegation_prefix: Optional[str] = None  # for PD mode
     enable_reservation: Optional[bool] = False
+    reservation_start: Optional[str] = None  # 预留地址范围起点
+    reservation_end: Optional[str] = None    # 预留地址范围终点
+    excludes: Optional[List[ExcludeCreate]] = None  # 排除范围
 
 
 class PoolCreate(BaseModel):
@@ -118,6 +123,9 @@ async def create_pool(
     db.add(pool)
     await db.flush()
 
+    # 使 dashboard 缓存失效
+    await cache_delete("dashboard:stats")
+
     # 可选：创建时直接添加子网
     created_subnets = []
     if req.subnets:
@@ -136,9 +144,23 @@ async def create_pool(
                 v6_mode=sn.v6_mode,
                 delegation_prefix=sn.delegation_prefix,
                 enable_reservation=sn.enable_reservation or False,
+                reservation_start=sn.reservation_start,
+                reservation_end=sn.reservation_end,
             )
             db.add(subnet)
             created_subnets.append(str(subnet.id))
+
+            # 创建排除范围
+            if sn.excludes:
+                await db.flush()  # 获取 subnet.id
+                for ex in sn.excludes:
+                    exc = AddressExclude(
+                        subnet_id=subnet.id,
+                        exclude_start=ex.exclude_start,
+                        exclude_end=ex.exclude_end,
+                        reason=ex.reason,
+                    )
+                    db.add(exc)
         await db.flush()
 
     return {
@@ -190,6 +212,8 @@ async def get_pool(
                 "v6_mode": s.v6_mode,
                 "delegation_prefix": s.delegation_prefix,
                 "enable_reservation": s.enable_reservation,
+                "reservation_start": str(s.reservation_start) if s.reservation_start else None,
+                "reservation_end": str(s.reservation_end) if s.reservation_end else None,
                 "lease_time": s.lease_time,
                 "excludes": [
                     {"id": str(e.id), "start": str(e.exclude_start),
@@ -230,6 +254,13 @@ async def update_pool(
         setattr(pool, field, value)
 
     await db.flush()
+
+    # 审计日志
+    await audit_log(db, str(user.id), user.username,
+                    "UPDATE", "pool", str(pool_id),
+                    {"fields": list(req.model_dump(exclude_unset=True).keys())})
+    await cache_delete("dashboard:stats")
+
     return {"message": "Pool updated"}
 
 
@@ -247,6 +278,10 @@ async def delete_pool(
 
     await db.delete(pool)
     await db.flush()
+    await audit_log(db, str(user.id), user.username,
+                    "DELETE", "pool", str(pool_id),
+                    {"name": pool.name})
+    await cache_delete("dashboard:stats")
     return {"message": "Pool deleted"}
 
 
@@ -279,9 +314,27 @@ async def add_subnet(
         v6_mode=req.v6_mode,
         delegation_prefix=req.delegation_prefix,
         enable_reservation=req.enable_reservation or False,
+        reservation_start=req.reservation_start,
+        reservation_end=req.reservation_end,
     )
     db.add(subnet)
     await db.flush()
+
+    # 创建排除范围
+    if req.excludes:
+        for ex in req.excludes:
+            exc = AddressExclude(
+                subnet_id=subnet.id,
+                exclude_start=ex.exclude_start,
+                exclude_end=ex.exclude_end,
+                reason=ex.reason,
+            )
+            db.add(exc)
+
+    await audit_log(db, str(user.id), user.username,
+                    "CREATE", "subnet", str(subnet.id),
+                    {"subnet": str(subnet.subnet), "netmask": subnet.netmask, "pool_id": str(pool_id)})
+    await cache_delete("dashboard:stats")
     return {"id": str(subnet.id), "message": "Subnet added"}
 
 
@@ -300,6 +353,10 @@ async def delete_subnet(
 
     await db.delete(subnet)
     await db.flush()
+    await audit_log(db, str(user.id), user.username,
+                    "DELETE", "subnet", str(subnet_id),
+                    {"subnet": str(subnet.subnet), "pool_id": str(pool_id)})
+    await cache_delete("dashboard:stats")
     return {"message": "Subnet deleted"}
 
 
@@ -321,6 +378,10 @@ async def add_exclude(
     )
     db.add(exclude)
     await db.flush()
+    await audit_log(db, str(user.id), user.username,
+                    "CREATE", "exclude", str(exclude.id),
+                    {"start": str(exclude.exclude_start), "end": str(exclude.exclude_end), "subnet_id": str(subnet_id)})
+    await cache_delete("dashboard:stats")
     return {"id": str(exclude.id), "message": "Exclude range added"}
 
 
@@ -337,6 +398,10 @@ async def delete_exclude(
         raise HTTPException(status_code=404, detail="Not found")
     await db.delete(exc)
     await db.flush()
+    await audit_log(db, str(user.id), user.username,
+                    "DELETE", "exclude", str(exclude_id),
+                    {"start": str(exc.exclude_start), "end": str(exc.exclude_end)})
+    await cache_delete("dashboard:stats")
     return {"message": "Exclude range deleted"}
 
 

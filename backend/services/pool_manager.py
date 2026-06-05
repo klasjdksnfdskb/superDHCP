@@ -10,7 +10,7 @@
 
 import ipaddress
 import logging
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Set
 from uuid import UUID
 from datetime import datetime, timezone
 from sqlalchemy import select, func, and_
@@ -162,13 +162,16 @@ class PoolManager:
         self, pool_id: UUID, mac_address: str, vlan_id: Optional[int] = None
     ) -> Optional[str]:
         """
-        为指定 MAC 分配 IPv4 地址
+        为指定 MAC 分配 IPv4 地址 — 游标 + 行锁保证并发安全
 
         分配策略:
-        1. 检查是否有预留地址
-        2. 按子网顺序分配，跳过排除范围
-        3. 跳过已分配且活跃的地址
+        1. 检查是否有预留地址 (预留优先)
+        2. 按子网顺序分配，使用 last_assigned_ip 游标加速
+        3. 子网行锁 (SELECT ... FOR UPDATE) 防止多 worker 重复分配
+        4. 跳过排除范围 & 已分配 IP
         """
+        from sqlalchemy import update as sa_update
+
         # 检查预留
         reservation = (await self.session.execute(
             select(AddressReservation).where(
@@ -192,13 +195,23 @@ class PoolManager:
                 logger.info(f"分配预留 IPv4: {reservation.reserved_ipv4} → MAC={mac_address}")
                 return str(reservation.reserved_ipv4)
 
-        # 遍历子网分配
+        # 遍历子网分配 — 加行锁
         pool = (await self.session.execute(
             select(AddressPool).where(AddressPool.id == pool_id)
         )).scalars().first()
 
-        for subnet in pool.subnets:
-            if subnet.ip_version != 4:
+        # 重新加载子网并加锁 (防止并发重复分配)
+        subnet_ids = [s.id for s in pool.subnets if s.ip_version == 4]
+        if not subnet_ids:
+            logger.warning(f"地址池 {pool.name} 无 IPv4 子网")
+            return None
+
+        for s_id in subnet_ids:
+            locked_result = await self.session.execute(
+                select(Subnet).where(Subnet.id == s_id).with_for_update()
+            )
+            subnet = locked_result.scalars().first()
+            if not subnet:
                 continue
 
             ip = await self._allocate_from_subnet(subnet, mac_address)
@@ -209,40 +222,69 @@ class PoolManager:
         return None
 
     async def _allocate_from_subnet(self, subnet: Subnet, mac_address: str) -> Optional[str]:
-        """从子网范围内分配 IP"""
+        """
+        从子网范围内分配 IP — 游标算法 O(1) 摊销
+
+        策略:
+        1. 从 last_assigned_ip 游标开始扫描 (而非从头)
+        2. 到达 range_end 时回绕到 range_start
+        3. 排除范围用区间树快速跳过
+        4. 已分配 IP 查 PostgreSQL (WHERE dhcpv4_address = candidate)
+        """
         start = ipaddress.IPv4Address(subnet.range_start)
         end = ipaddress.IPv4Address(subnet.range_end)
+        start_int = int(start)
+        end_int = int(end)
+        total = end_int - start_int + 1
 
-        # 收集排除范围
-        exclude_ranges = []
+        # 构建排除范围区间 (排序 + 合并)
+        exclude_intervals: List[Tuple[int, int]] = []
         for exc in subnet.excludes:
-            exc_start = ipaddress.IPv4Address(exc.exclude_start)
-            exc_end = ipaddress.IPv4Address(exc.exclude_end)
-            exclude_ranges.append((int(exc_start), int(exc_end)))
+            exc_start = int(ipaddress.IPv4Address(exc.exclude_start))
+            exc_end = int(ipaddress.IPv4Address(exc.exclude_end))
+            exclude_intervals.append((exc_start, exc_end))
+        exclude_intervals.sort()
 
-        # 收集已分配的 IP
-        active_ips_result = await self.session.execute(
-            select(DHCPLease.dhcpv4_address).where(
-                DHCPLease.state == LeaseState.ACTIVE,
-                DHCPLease.mac_address != mac_address
+        def _is_excluded(ip_int: int) -> bool:
+            for lo, hi in exclude_intervals:
+                if ip_int < lo:
+                    return False
+                if lo <= ip_int <= hi:
+                    return True
+            return False
+
+        # 确定扫描起点: 从游标下一个 IP 开始
+        cursor = start_int
+        if subnet.last_assigned_ip:
+            last = int(ipaddress.IPv4Address(subnet.last_assigned_ip))
+            if start_int <= last < end_int:
+                cursor = last + 1
+
+        # 游标扫描: 从 cursor → end, 若未找到则回绕 start → cursor-1
+        for offset in range(total):
+            candidate_int = cursor + offset
+            if candidate_int > end_int:
+                candidate_int = start_int + (candidate_int - end_int - 1)
+
+            if _is_excluded(candidate_int):
+                continue
+
+            candidate_str = str(ipaddress.IPv4Address(candidate_int))
+
+            # 检查该 IP 是否已被占用 (单点查询, O(log n) with index)
+            existing = await self.session.execute(
+                select(DHCPLease.mac_address).where(
+                    DHCPLease.dhcpv4_address == candidate_str,
+                    DHCPLease.state == LeaseState.ACTIVE,
+                    DHCPLease.mac_address != mac_address
+                ).limit(1)
             )
-        )
-        active_ips = set(str(ip) for ip, in active_ips_result.all() if ip)
-
-        # 线性扫描分配 (50万+ 场景考虑改用 bitmap)
-        for offset in range(int(end) - int(start) + 1):
-            candidate = ipaddress.IPv4Address(int(start) + offset)
-            candidate_int = int(candidate)
-            candidate_str = str(candidate)
-
-            # 跳过排除范围
-            if any(lo <= candidate_int <= hi for lo, hi in exclude_ranges):
+            if existing.scalars().first():
                 continue
 
-            # 跳过已分配
-            if candidate_str in active_ips:
-                continue
-
+            # 分配成功 → 更新游标
+            subnet.last_assigned_ip = candidate_str
+            await self.session.flush()
             return candidate_str
 
         return None

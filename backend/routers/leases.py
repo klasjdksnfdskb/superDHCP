@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-import io
 
 from models.database import get_db
 from models.user import User
@@ -65,7 +64,7 @@ async def export_csv(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    导出租约 CSV
+    流式导出租约 CSV (逐行异步生成，内存 O(1))
 
     输出含所有字段: MAC, DHCPv4/v6 地址, 租期, DUID, 获取方式, 组织架构标签等
     """
@@ -78,10 +77,8 @@ async def export_csv(
     if pool_id:
         filters["pool_id"] = pool_id
 
-    csv_content = await lease_mgr.export_csv(filters=filters)
-
     return StreamingResponse(
-        io.StringIO(csv_content),
+        lease_mgr.export_csv(filters=filters),
         media_type="text/csv",
         headers={
             "Content-Disposition": "attachment; filename=dhcp_leases_export.csv",

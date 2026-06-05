@@ -170,7 +170,20 @@
     "reservationHint": "Bind fixed IPs to specific MAC addresses",
     "reservationStart": "Reserved Range Start",
     "reservationEnd": "Reserved Range End",
-    "noTagsLoaded": "Failed to load org tags"
+    "noTagsLoaded": "Failed to load org tags",
+    "ntpServers": "NTP Servers (comma-separated)",
+    "ntpPlaceholder": "pool.ntp.org, time.google.com",
+    "nextServer": "PXE Next-Server (TFTP)",
+    "nextServerPlaceholder": "192.168.1.10",
+    "bootfile": "PXE Boot File",
+    "bootfilePlaceholder": "pxelinux.0",
+    "excludeRanges": "Exclude Ranges",
+    "excludeStart": "Exclude Start IP",
+    "excludeEnd": "Exclude End IP",
+    "excludeReason": "Exclude Reason",
+    "excludeReasonPlaceholder": "e.g. Core Switch / Printer",
+    "addExclude": "Add Exclude Range",
+    "noExcludes": "No exclude ranges"
   },
 
   "tags": {

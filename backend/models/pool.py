@@ -99,6 +99,9 @@ class Subnet(Base):
     v6_mode = Column(String(16), nullable=True, comment="IPv6模式: stateful/stateless/pd")
     delegation_prefix = Column(String(64), nullable=True, comment="DHCPv6-PD委派前缀")
     enable_reservation = Column(Boolean, default=False, comment="为该子网启用预留地址池")
+    reservation_start = Column(INET, nullable=True, comment="预留地址范围起点")
+    reservation_end = Column(INET, nullable=True, comment="预留地址范围终点")
+    last_assigned_ip = Column(INET, nullable=True, comment="最后分配的IP游标(加速分配)")
     lease_time = Column(Integer, nullable=True, comment="覆盖全局租期(秒)")
     option_data = Column(JSONB, nullable=True, comment="自定义 DHCP 选项")
 

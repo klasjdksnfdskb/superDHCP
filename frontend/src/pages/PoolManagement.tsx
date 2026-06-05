@@ -48,6 +48,7 @@ interface SubnetDraft {
   enable_reservation_v6: boolean;
   reservation_start_v6: string;
   reservation_end_v6: string;
+  excludes: Array<{ start: string; end: string; reason: string }>;
 }
 
 const emptySubnet = (v: number): SubnetDraft => ({
@@ -68,6 +69,7 @@ const emptySubnet = (v: number): SubnetDraft => ({
   enable_reservation_v6: false,
   reservation_start_v6: '',
   reservation_end_v6: '',
+  excludes: [],
 });
 
 export default function PoolManagement() {
@@ -85,6 +87,9 @@ export default function PoolManagement() {
   const [addDesc, setAddDesc] = useState('');
   const [addVlans, setAddVlans] = useState('');
   const [addTagId, setAddTagId] = useState('');
+  const [addNtp, setAddNtp] = useState('');
+  const [addBootfile, setAddBootfile] = useState('');
+  const [addNextServer, setAddNextServer] = useState('');
   const [subnets, setSubnets] = useState<SubnetDraft[]>([emptySubnet(4)]);
 
   const fetchPools = async () => {
@@ -120,6 +125,9 @@ export default function PoolManagement() {
     setAddDesc('');
     setAddVlans('');
     setAddTagId('');
+    setAddNtp('');
+    setAddBootfile('');
+    setAddNextServer('');
     setSubnets([emptySubnet(4)]);
   };
 
@@ -132,6 +140,9 @@ export default function PoolManagement() {
         vlan_ids: addVlans ? addVlans.split(',').map(Number) : [],
         tag_id: addTagId || undefined,
         domain_name: undefined,
+        ntp_servers: addNtp ? addNtp.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+        bootfile: addBootfile || undefined,
+        next_server: addNextServer || undefined,
         subnets: subnets
           .filter((sn) => sn.subnet.trim())
           .map((sn) => ({
@@ -155,6 +166,10 @@ export default function PoolManagement() {
             reservation_end: sn.ip_version === 4
               ? (sn.reservation_end_v4.trim() || undefined)
               : (sn.reservation_end_v6.trim() || undefined),
+            excludes: sn.excludes.length > 0
+              ? sn.excludes.filter((ex) => ex.start.trim() && ex.end.trim())
+                .map((ex) => ({ exclude_start: ex.start.trim(), exclude_end: ex.end.trim(), reason: ex.reason || undefined }))
+              : undefined,
           })),
       };
       await poolsAPI.create(payload);
@@ -194,6 +209,25 @@ export default function PoolManagement() {
   const switchIpVersion = (i: number, version: number) => {
     setSubnets(subnets.map((sn, idx) =>
       idx === i ? { ...emptySubnet(version), subnet: sn.subnet, netmask: sn.netmask } : sn
+    ));
+  };
+
+  // ── Exclude helpers ──
+  const addExcludeRow = (si: number) => {
+    setSubnets(subnets.map((sn, idx) =>
+      idx === si ? { ...sn, excludes: [...sn.excludes, { start: '', end: '', reason: '' }] } : sn
+    ));
+  };
+  const removeExcludeRow = (si: number, ei: number) => {
+    setSubnets(subnets.map((sn, idx) =>
+      idx === si ? { ...sn, excludes: sn.excludes.filter((_, j) => j !== ei) } : sn
+    ));
+  };
+  const updateExclude = (si: number, ei: number, key: string, val: string) => {
+    setSubnets(subnets.map((sn, idx) =>
+      idx === si ? {
+        ...sn, excludes: sn.excludes.map((ex, j) => j === ei ? { ...ex, [key]: val } : ex)
+      } : sn
     ));
   };
 
@@ -332,6 +366,25 @@ export default function PoolManagement() {
                 <label className="form-label">{t('pools.bindVlan')}</label>
                 <input className="input" value={addVlans} onChange={(e) => setAddVlans(e.target.value)}
                   placeholder={t('pools.vlanPlaceholder')} />
+              </div>
+
+              {/* NTP / PXE 配置 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="form-group">
+                  <label className="form-label">{t('pools.ntpServers')}</label>
+                  <input className="input" value={addNtp} onChange={(e) => setAddNtp(e.target.value)}
+                    placeholder={t('pools.ntpPlaceholder')} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{t('pools.nextServer')}</label>
+                  <input className="input" value={addNextServer} onChange={(e) => setAddNextServer(e.target.value)}
+                    placeholder={t('pools.nextServerPlaceholder')} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{t('pools.bootfile')}</label>
+                <input className="input" value={addBootfile} onChange={(e) => setAddBootfile(e.target.value)}
+                  placeholder={t('pools.bootfilePlaceholder')} />
               </div>
             </fieldset>
 
@@ -590,6 +643,59 @@ export default function PoolManagement() {
                       )}
                     </>
                   )}
+
+                  {/* ── Exclude Ranges (shared for v4/v6) ── */}
+                  <div style={{
+                    borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                        {t('pools.excludeRanges')}
+                      </span>
+                      <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 11 }}
+                        onClick={() => addExcludeRow(i)}>
+                        <Plus size={12} /> {t('pools.addExclude')}
+                      </button>
+                    </div>
+                    {sn.excludes.length === 0 ? (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 4 }}>
+                        {t('pools.noExcludes')}
+                      </div>
+                    ) : (
+                      sn.excludes.map((ex, ei) => (
+                        <div key={ei} style={{
+                          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8,
+                          alignItems: 'end', marginBottom: 8,
+                        }}>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: 10 }}>{t('pools.excludeStart')}</label>
+                            <input className="input" value={ex.start}
+                              placeholder="10.0.0.100" style={{ fontSize: 11, padding: '4px 6px' }}
+                              onChange={(e) => updateExclude(i, ei, 'start', e.target.value)} />
+                          </div>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: 10 }}>{t('pools.excludeEnd')}</label>
+                            <input className="input" value={ex.end}
+                              placeholder="10.0.0.109" style={{ fontSize: 11, padding: '4px 6px' }}
+                              onChange={(e) => updateExclude(i, ei, 'end', e.target.value)} />
+                          </div>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontSize: 10 }}>{t('pools.excludeReason')}</label>
+                            <input className="input" value={ex.reason}
+                              placeholder={t('pools.excludeReasonPlaceholder')}
+                              style={{ fontSize: 11, padding: '4px 6px' }}
+                              onChange={(e) => updateExclude(i, ei, 'reason', e.target.value)} />
+                          </div>
+                          <button className="btn btn-sm btn-danger"
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                            onClick={() => removeExcludeRow(i, ei)}
+                            title={t('common.delete')}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               ))}
 

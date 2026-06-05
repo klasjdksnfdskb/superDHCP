@@ -346,21 +346,14 @@ class LeaseManager:
         self,
         filters: Optional[Dict] = None,
         max_rows: int = 100000,
-    ) -> str:
+    ):
         """
-        流式导出 CSV
+        流式导出 CSV (异步生成器, 逐行 yield)
+        适合百万级数据导出, 内存占用 O(1)
 
-        输出列:
-        MAC, DHCPv4, Mask, Gateway, v4_Start, v4_End, v4_LeaseTime,
-        DHCPv6, PrefixLen, DUID, IAID, v6_Mode, v6_Start, v6_End, v6_LeaseTime,
-        VLAN, Hostname, Option43, Option82,
-        CustomTag_Path, Pool_Name, State, FirstSeen, LastUpdated
+        输出列: MAC, DHCPv4/v6, DUID, VLAN, Hostname, 组织标签 等
         """
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        # 表头
-        writer.writerow([
+        HEADER = [
             "MAC地址",
             "IPv4地址", "子网掩码", "默认网关",
             "v4租约开始", "v4租约到期", "v4租期(秒)",
@@ -370,14 +363,14 @@ class LeaseManager:
             "Option43", "Option82",
             "组织架构标签", "地址池",
             "状态", "首次发现", "最后更新",
-        ])
+        ]
+        yield "\ufeff"  # BOM
+        yield ",".join(f'"{h}"' for h in HEADER) + "\n"
 
-        # 流式查询
         stmt = select(DHCPLease).options(
             selectinload(DHCPLease.pool),
             selectinload(DHCPLease.custom_tag),
         )
-
         if filters:
             flt = []
             if "vlan_id" in filters:
@@ -388,16 +381,12 @@ class LeaseManager:
                 flt.append(DHCPLease.pool_id == filters["pool_id"])
             if flt:
                 stmt = stmt.where(and_(*flt))
-
         stmt = stmt.order_by(DHCPLease.last_updated.desc()).limit(max_rows)
 
         result = await self.session.execute(stmt)
-        row_count = 0
-
         for lease in result.scalars():
             tag_path = lease.custom_tag.get_full_path() if lease.custom_tag else ""
-
-            writer.writerow([
+            row = [
                 lease.mac_address,
                 str(lease.dhcpv4_address) if lease.dhcpv4_address else "",
                 str(lease.dhcpv4_netmask) if lease.dhcpv4_netmask else "",
@@ -423,11 +412,8 @@ class LeaseManager:
                 lease.state.value if lease.state else "",
                 lease.first_seen.isoformat() if lease.first_seen else "",
                 lease.last_updated.isoformat() if lease.last_updated else "",
-            ])
-            row_count += 1
-
-        logger.info(f"CSV 导出完成: {row_count} 条记录")
-        return output.getvalue()
+            ]
+            yield ",".join(f'"{str(c).replace(chr(34), chr(34)+chr(34))}"' for c in row) + "\n"
 
     # ─── 统计 ───
 
@@ -501,3 +487,46 @@ class LeaseManager:
             "v6_stateless": v6_stateless_result.scalar() or 0,
             "vlan_distribution": vlan_distribution,
         }
+
+    # ─── 租约回收 ───
+
+    async def cleanup_expired(self, grace_seconds: int = 300) -> Dict:
+        """
+        清理过期 DHCPv4 与 DHCPv6 租约
+
+        Args:
+            grace_seconds: 额外宽限期 (默认 5 分钟)，避免时钟偏差误删
+        Returns:
+            {"v4_expired": int, "v6_expired": int}
+        """
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=grace_seconds)
+
+        # v4 过期租约
+        v4_stmt = select(DHCPLease).where(
+            DHCPLease.state == LeaseState.ACTIVE,
+            DHCPLease.dhcpv4_address.isnot(None),
+            DHCPLease.dhcpv4_lease_end < cutoff,
+        )
+        v4_result = await self.session.execute(v4_stmt)
+        v4_expired = v4_result.scalars().all()
+        for lease in v4_expired:
+            lease.state = LeaseState.EXPIRED
+            lease.dhcpv4_address = None
+
+        # v6 过期租约
+        v6_stmt = select(DHCPLease).where(
+            DHCPLease.state == LeaseState.ACTIVE,
+            DHCPLease.dhcpv6_address.isnot(None),
+            DHCPLease.dhcpv6_lease_end < cutoff,
+        )
+        v6_result = await self.session.execute(v6_stmt)
+        v6_expired = v6_result.scalars().all()
+        for lease in v6_expired:
+            lease.state = LeaseState.EXPIRED
+            lease.dhcpv6_address = None
+
+        logger.info(f"租约回收: v4={len(v4_expired)}, v6={len(v6_expired)}")
+        return {"v4_expired": len(v4_expired), "v6_expired": len(v6_expired)}

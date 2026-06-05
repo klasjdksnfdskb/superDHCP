@@ -179,6 +179,14 @@ class DHCPv4Response:
         parts = [int(p) for p in ip.split('.')]
         self.options[code] = bytes(parts)
 
+    def set_multi_ip_option(self, code: int, ips: list):
+        """设置多 IP 选项 (如 DNS — 每个 IP 4 字节串联)"""
+        data = bytearray()
+        for ip in ips:
+            parts = [int(p) for p in str(ip).split('.')]
+            data.extend(bytes(parts))
+        self.options[code] = bytes(data)
+
     def build(self, yiaddr: str = '0.0.0.0', siaddr: str = '0.0.0.0',
               server_id: Optional[str] = None,
               lease_time: int = 86400) -> bytes:
@@ -263,9 +271,7 @@ class DHCPv4Engine:
         if subnet.gateway:
             resp.set_ip_option(OPT_ROUTER, str(subnet.gateway))
         if subnet.dns_servers:
-            for dns in subnet.dns_servers:
-                # Multi-DNS 支持
-                pass
+            resp.set_multi_ip_option(OPT_DNS, [str(d) for d in subnet.dns_servers])
 
         # 自定义选项 (Option 43)
         option_data = subnet.option_data.get("option43") if subnet.option_data else None
@@ -303,8 +309,7 @@ class DHCPv4Engine:
         if subnet.gateway:
             resp.set_ip_option(OPT_ROUTER, str(subnet.gateway))
         if subnet.dns_servers:
-            for dns in subnet.dns_servers[:4]:
-                resp.set_ip_option(OPT_DNS, str(dns))
+            resp.set_multi_ip_option(OPT_DNS, [str(d) for d in subnet.dns_servers[:4]])
         lease_time = subnet.lease_time or 86400
 
         # Option 43

@@ -205,6 +205,40 @@ class DHCPv6Packet:
 
         return None
 
+    def parse_iapd(self) -> Tuple[Optional[int], Optional[int], int]:
+        """
+        解析 IA_PD (Identity Association for Prefix Delegation)
+        返回: (iaid, t1, requested_prefix_len)
+        """
+        data = None
+        for code in (OPT_IA_PD,):
+            items = self.options.get(code, [])
+            if items:
+                data = items[0][1]
+                break
+        if not data or len(data) < 12:
+            return None, None, 0
+
+        iaid = struct.unpack('!I', data[0:4])[0]
+        t1 = struct.unpack('!I', data[4:8])[0]
+        t2 = struct.unpack('!I', data[8:12])[0]
+
+        # 解析 IAPREFIX 子选项
+        requested_len = 0
+        pos = 12
+        while pos + 4 <= len(data):
+            opt_code = struct.unpack('!H', data[pos:pos+2])[0]
+            opt_len = struct.unpack('!H', data[pos+2:pos+4])[0]
+            pos += 4
+            if opt_code == OPT_IAPREFIX and opt_len >= 25:
+                pref_life = struct.unpack('!I', data[pos:pos+4])[0]
+                valid_life = struct.unpack('!I', data[pos+4:pos+8])[0]
+                prefix_len = data[pos+8]
+                requested_len = prefix_len
+            pos += opt_len
+
+        return iaid, t1, requested_len
+
 
 class DHCPv6Response:
     """构建 DHCPv6 响应报文"""
@@ -242,14 +276,39 @@ class DHCPv6Engine:
     def __init__(self, pool_manager, lease_manager):
         self.pool_manager = pool_manager
         self.lease_manager = lease_manager
-        self.server_duid = b'\x00\x01\x00\x01' + b'\x00' * 10  # DUID-LLT, 需在启动时生成
+        self.server_duid = self._generate_duid()
+
+    @staticmethod
+    def _generate_duid() -> bytes:
+        """
+        生成 Server DUID (DUID-LLT)
+        结构: type(2B) + hw_type(2B) + timestamp(4B) + mac(6B)
+        使用随机 MAC + 当前时间戳
+        """
+        import time
+        import random
+        import uuid
+
+        duid = bytearray()
+        duid.extend(struct.pack('!H', DUID_LLT))  # DUID-LLT
+        duid.extend(struct.pack('!H', 1))          # Ethernet
+        duid.extend(struct.pack('!I', int(time.time())))
+
+        # 使用系统第一个可用 MAC 或随机生成
+        mac = uuid.getnode()
+        mac_bytes = struct.pack('!Q', mac)[2:]  # 后 6 字节
+        duid.extend(mac_bytes)
+
+        logger.info(f"Server DUID: {duid.hex()}")
+        return bytes(duid)
 
     async def handle_solicit(self, pkt: DHCPv6Packet, vlan_id: Optional[int],
                              client_mac: Optional[str] = None) -> Tuple[Optional[DHCPv6Response], Optional[str], Optional[str]]:
         """
         处理 SOLICIT → ADVERTISE
-        
+
         返回: (response, assigned_address, mode)
+        mode: "stateful" | "stateless" | "pd"
         """
         pool = await self.pool_manager.find_pool_by_vlan(vlan_id)
         if not pool:
@@ -259,10 +318,14 @@ class DHCPv6Engine:
         duid_info = pkt.parse_duid()
         duid_hex = duid_info.get("raw", "")
 
-        # 检查是否请求无状态 (INFORMATION-REQUEST 备选)
-        # 根据 ORO 判断客户端需要什么
+        # 检查是否请求 IA_PD (前缀委派)
+        iaid_pd, t1_pd, prefix_len = pkt.parse_iapd()
+        if iaid_pd is not None and prefix_len > 0:
+            pd_result = await self._handle_pd(pool, pkt, duid_hex, iaid_pd, t1_pd, prefix_len)
+            if pd_result:
+                return pd_result
 
-        # 尝试有状态分配
+        # 尝试有状态地址分配
         ipv6_addr = await self.pool_manager.allocate_ipv6(pool.id, client_mac or duid_hex)
         if ipv6_addr:
             resp = DHCPv6Response(pkt, ADVERTISE)
@@ -282,8 +345,9 @@ class DHCPv6Engine:
                              client_mac: Optional[str] = None) -> Tuple[Optional[DHCPv6Response], Optional[str], Optional[str]]:
         """
         处理 REQUEST → REPLY
-        
+
         有状态: 确认地址分配
+        前缀委派(PD): 确认前缀
         无状态: 返回配置信息
         """
         pool = await self.pool_manager.find_pool_by_vlan(vlan_id)
@@ -293,6 +357,13 @@ class DHCPv6Engine:
         duid_info = pkt.parse_duid()
         duid_hex = duid_info.get("raw", "")
         iaid, t1, requested_addrs = pkt.parse_iana()
+
+        # 检查 IA_PD (前缀委派确认)
+        iaid_pd, t1_pd, prefix_len = pkt.parse_iapd()
+        if iaid_pd is not None and prefix_len > 0:
+            pd_result = await self._handle_pd(pool, pkt, duid_hex, iaid_pd, t1_pd, prefix_len, is_request=True)
+            if pd_result:
+                return pd_result
 
         if requested_addrs:
             # 有状态模式
@@ -383,6 +454,84 @@ class DHCPv6Engine:
         return resp
 
     # ─── Helper Methods ───
+
+    async def _handle_pd(self, pool, pkt: DHCPv6Packet, duid_hex: str,
+                         iaid: int, t1: Optional[int], prefix_len: int,
+                         is_request: bool = False) -> Optional[Tuple[DHCPv6Response, str, str]]:
+        """
+        处理前缀委派 (Prefix Delegation)
+
+        策略:
+        1. 查找 pool 中 v6_mode='pd' 的子网
+        2. 使用 delegation_prefix 作为委派前缀
+        3. 若无 PD 子网，回退到 IPv6 状态分配
+        """
+        # 查找 PD 模式子网
+        pd_subnet = None
+        for sn in pool.subnets:
+            if sn.ip_version == 6 and sn.v6_mode == 'pd' and sn.delegation_prefix:
+                pd_subnet = sn
+                break
+
+        if not pd_subnet:
+            logger.warning(f"DHCPv6 PD: 地址池 {pool.name} 无 PD 子网")
+            return None
+
+        delegated_prefix = pd_subnet.delegation_prefix
+
+        # 构建响应
+        msg_type = REPLY if is_request else ADVERTISE
+        resp = DHCPv6Response(pkt, msg_type)
+        self._add_server_id(resp)
+        self._add_client_id(resp, pkt)
+        self._add_iapd_response(resp, iaid, t1 or 3600, delegated_prefix, prefix_len)
+        self._add_stateless_options(resp, pkt, pool)
+
+        # 记录 PD 租约
+        if is_request:
+            await self.lease_manager.update_dhcpv6_lease(
+                mac_address=None,
+                duid=duid_hex,
+                iaid=iaid,
+                dhcpv6_address=delegated_prefix,
+                lease_time=86400,
+                mode="pd",
+                pool_id=pool.id,
+            )
+
+        logger.info(f"DHCPv6 PD: 委派前缀 {delegated_prefix}/{prefix_len} → DUID={duid_hex[:16]}...")
+        return resp, f"{delegated_prefix}/{prefix_len}", "pd"
+
+    def _add_iapd_response(self, resp: DHCPv6Response, iaid: int, t1: int,
+                           prefix: str, prefix_len: int):
+        """构建 IA_PD 响应 (含 IAPREFIX)"""
+        t2 = int(t1 * 0.8)
+        pref_life = 3600
+        valid_life = 7200
+
+        # 解析委派前缀为 IPv6 字节
+        prefix_net = prefix
+        if '/' in prefix_net:
+            prefix_net = prefix_net.split('/')[0]
+
+        try:
+            import ipaddress
+            prefix_bytes = ipaddress.IPv6Network(f"{prefix_net}/{prefix_len}", strict=False).network_address.packed
+        except Exception:
+            # fallback: 用零填充
+            prefix_bytes = bytes(16)
+
+        # IAPREFIX 子选项 (25 bytes minimum)
+        iaprefix = struct.pack('!HH', OPT_IAPREFIX, 25)
+        iaprefix += struct.pack('!II', pref_life, valid_life)
+        iaprefix += struct.pack('!B', prefix_len)
+        iaprefix += prefix_bytes
+
+        # IA_PD option
+        iapd = struct.pack('!IIII', iaid, t1, t2, 0)
+        iapd += iaprefix
+
+        resp.set_option(OPT_IA_PD, iapd)
 
     def _add_server_id(self, resp: DHCPv6Response):
         resp.set_option(OPT_SERVERID, self.server_duid)

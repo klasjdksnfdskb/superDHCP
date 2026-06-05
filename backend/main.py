@@ -3,8 +3,9 @@ superDHCP — FastAPI 应用入口
 """
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -12,6 +13,8 @@ from starlette.responses import JSONResponse
 
 from app_settings import settings
 from models.database import init_db, engine
+from services.dhcp_server import DHCPServer
+from services.redis_client import close_redis, rate_limit_check
 from routers import (
     auth_router,
     dashboard_router,
@@ -42,11 +45,27 @@ async def lifespan(app: FastAPI):
     # 创建默认管理员 (如果不存在)
     await _seed_default_admin()
 
-    logger.info(f"✅ superDHCP API 就绪 — 监听 0.0.0.0:8000")
+    # 启动 DHCP 协议服务 (后台任务)
+    dhcp_server = DHCPServer()
+    dhcp_task = asyncio.create_task(dhcp_server.start())
+    app.state.dhcp_server = dhcp_server
+    app.state.dhcp_task = dhcp_task
+    logger.info("✅ superDHCP 就绪 — API:8000 DHCPv4:67 DHCPv6:547")
+
     yield
 
-    # 关闭
+    # 关闭 DHCP 服务
     logger.info("🛑 superDHCP 关闭中...")
+    if dhcp_server:
+        dhcp_server.running = False
+    if dhcp_task and not dhcp_task.done():
+        dhcp_task.cancel()
+        try:
+            await dhcp_task
+        except asyncio.CancelledError:
+            pass
+    await dhcp_server.stop()
+    await close_redis()
     await engine.dispose()
     logger.info("✅ 数据库连接池已释放")
 
@@ -99,6 +118,25 @@ app.add_middleware(
 # GZip 压缩
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# API 限流 (令牌桶, 60次/分钟/IP)
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # 跳过健康检查 & 文档
+        if request.url.path.startswith(("/api/health", "/api/docs", "/api/redoc")):
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "unknown"
+        key = f"ratelimit:{client_ip}:{request.url.path}"
+        allowed = await rate_limit_check(key, max_requests=60, window_seconds=60)
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "请求过于频繁，请稍后再试 (60次/分钟)"}
+            )
+        return await call_next(request)
+
+app.add_middleware(RateLimitMiddleware)
+
 # 安全头
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -128,6 +166,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": settings.APP_VERSION,
+        "dhcp_server_running": getattr(app.state, 'dhcp_server', None) is not None and app.state.dhcp_server.running,
         "services": {
             "dhcpv4": settings.DHCPV4_ENABLED,
             "dhcpv6": settings.DHCPV6_ENABLED,

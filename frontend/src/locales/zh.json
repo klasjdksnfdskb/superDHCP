@@ -170,7 +170,20 @@
     "reservationHint": "为特定MAC绑定固定IP地址",
     "reservationStart": "预留范围起始",
     "reservationEnd": "预留范围结束",
-    "noTagsLoaded": "组织架构标签加载失败"
+    "noTagsLoaded": "组织架构标签加载失败",
+    "ntpServers": "NTP 服务器 (逗号分隔)",
+    "ntpPlaceholder": "ntp.aliyun.com, ntp.tencent.com",
+    "nextServer": "PXE Next-Server (TFTP)",
+    "nextServerPlaceholder": "192.168.1.10",
+    "bootfile": "PXE 引导文件",
+    "bootfilePlaceholder": "pxelinux.0",
+    "excludeRanges": "排除范围",
+    "excludeStart": "排除起始 IP",
+    "excludeEnd": "排除结束 IP",
+    "excludeReason": "排除原因",
+    "excludeReasonPlaceholder": "例如: 核心交换机/打印机",
+    "addExclude": "添加排除范围",
+    "noExcludes": "无排除范围"
   },
 
   "tags": {

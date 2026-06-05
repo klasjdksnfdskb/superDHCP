@@ -249,6 +249,9 @@ setup_postgres() {
         ALTER TABLE subnets ADD COLUMN IF NOT EXISTS v6_mode varchar(16);
         ALTER TABLE subnets ADD COLUMN IF NOT EXISTS delegation_prefix varchar(64);
         ALTER TABLE subnets ADD COLUMN IF NOT EXISTS enable_reservation boolean DEFAULT false;
+        ALTER TABLE subnets ADD COLUMN IF NOT EXISTS last_assigned_ip inet;
+        ALTER TABLE subnets ADD COLUMN IF NOT EXISTS reservation_start inet;
+        ALTER TABLE subnets ADD COLUMN IF NOT EXISTS reservation_end inet;
     \"" 2>/dev/null || log_warn "Migration may have already been applied, continuing..."
 
     log_info "PostgreSQL configured."
@@ -384,6 +387,7 @@ Group=$APP_USER
 WorkingDirectory=$APP_DIR/backend
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=$CONFIG_DIR/.env
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ExecStart=$VENV_DIR/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 4
 Restart=always
 RestartSec=5

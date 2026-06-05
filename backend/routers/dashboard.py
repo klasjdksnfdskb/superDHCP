@@ -1,5 +1,5 @@
 """
-仪表盘路由 — 实时 Dashboard 数据
+仪表盘路由 — 实时 Dashboard 数据 (Redis 缓存)
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +9,7 @@ from models.database import get_db
 from models.user import User
 from services.lease_manager import LeaseManager
 from services.pool_manager import PoolManager
+from services.redis_client import cache_get, cache_set
 from .auth import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
@@ -19,14 +20,19 @@ async def get_stats(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取全局 Dashboard 统计数据"""
+    """获取全局 Dashboard 统计数据 (30s Redis 缓存)"""
+    # 尝试从缓存读取
+    cached = await cache_get("dashboard:stats")
+    if cached:
+        return cached
+
     lease_mgr = LeaseManager(db)
     pool_mgr = PoolManager(db)
 
     stats = await lease_mgr.get_global_stats()
     pools = await pool_mgr.get_pools_with_stats()
 
-    return {
+    result = {
         **stats,
         "pools": pools,
         "pool_summary": {
@@ -36,6 +42,10 @@ async def get_stats(
             "total_free": sum(p["stats"].get("total_free", 0) for p in pools),
         },
     }
+
+    # 写入缓存 (30s TTL)
+    await cache_set("dashboard:stats", result, ttl=30)
+    return result
 
 
 @router.get("/activity")

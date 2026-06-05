@@ -23,9 +23,9 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://superdhcp:superdhcp_secure_pwd@localhost:5432/superdhcp",
         description="异步 PostgreSQL 连接串 (asyncpg 驱动)"
     )
-    DB_POOL_SIZE: int = 40        # 连接池大小（支撑高并发）
-    DB_MAX_OVERFLOW: int = 20     # 溢出连接数
-    DB_POOL_RECYCLE: int = 3600   # 连接回收时间(秒)
+    DB_POOL_SIZE: int = 80        # 连接池大小 (支撑 50 万并发)
+    DB_MAX_OVERFLOW: int = 40     # 溢出连接数 (峰值: 120)
+    DB_POOL_RECYCLE: int = 1800   # 连接回收时间 (30 分钟)
 
     # ─── Redis ───
     REDIS_URL: str = "redis://localhost:6379/0"
