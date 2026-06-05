@@ -332,13 +332,18 @@ configure_selinux() {
 setup_nginx() {
     log_info "Configuring Nginx..."
 
+    # Remove stock nginx default server (it has 'listen 80 default_server' which
+    # would steal all traffic before our config)
+    rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default 2>/dev/null || true
+
     # Copy nginx config
     if [ -f "$PROJECT_DIR/deploy/nginx-superdhcp.conf" ]; then
         cp "$PROJECT_DIR/deploy/nginx-superdhcp.conf" /etc/nginx/conf.d/superdhcp.conf
     else
         cat > /etc/nginx/conf.d/superdhcp.conf <<'NGINX_EOF'
 server {
-    listen 80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
     server_name _;
 
     # Frontend static files
